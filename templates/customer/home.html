@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clothyk — Trendy Dresses Online India</title>
+  <meta name="description" content="Shop the latest trendy dresses online in India. Affordable fashion delivered to your doorstep.">
+  <meta property="og:title" content="Clothyk — Trendy Dresses Online India">
+  <meta property="og:description" content="Shop the latest trendy dresses online in India.">
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <style>
+    .hero {
+      background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 50%, var(--primary-light) 100%);
+      color: #fff;
+      padding: 80px 24px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Ccircle cx='30' cy='30' r='20'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    }
+    .hero-content { position: relative; max-width: 640px; margin: 0 auto; }
+    .hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 900; margin-bottom: 16px; line-height: 1.2; }
+    .hero p { font-size: 1.15rem; opacity: .85; margin-bottom: 32px; }
+    .hero-btns { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .hero-btn-outline { border: 2px solid rgba(255,255,255,.6); color: #fff; background: transparent; }
+    .hero-btn-outline:hover { background: rgba(255,255,255,.15); }
+
+    .categories-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 16px;
+    }
+    .category-card {
+      background: #fff;
+      border-radius: var(--radius);
+      padding: 24px 12px;
+      text-align: center;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      transition: all .2s;
+      border: 2px solid transparent;
+    }
+    .category-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+    .category-icon { font-size: 2rem; margin-bottom: 8px; }
+    .category-name { font-weight: 600; font-size: 0.9rem; color: var(--text); }
+
+    .trust-bar {
+      background: var(--primary);
+      color: #fff;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+    .trust-item { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; font-weight: 500; }
+
+    .banner-strip {
+      background: linear-gradient(135deg, #FFF3CD, #FEF3C7);
+      border: 1px solid #FCD34D;
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .banner-strip h3 { color: #92400E; font-size: 1.1rem; }
+    .banner-strip p { color: #B45309; font-size: 0.9rem; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="/" class="nav-logo">👗 Clothyk</a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/products">Shop</a>
+      <a href="/wishlist">Wishlist</a>
+    </div>
+    <div class="nav-actions">
+      <button class="nav-icon-btn" onclick="window.location='/wishlist'" title="Wishlist">
+        ❤️ <span id="wishlist-badge" class="nav-badge" style="display:none">0</span>
+      </button>
+      <button class="nav-icon-btn" onclick="window.location='/cart'" title="Cart">
+        🛍️ <span id="cart-badge" class="nav-badge" style="display:none">0</span>
+      </button>
+      <button class="hamburger" onclick="toggleMobileMenu()">☰</button>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1>Dress to Impress ✨</h1>
+      <p>Discover handpicked trendy dresses from local boutiques — delivered to your door across India</p>
+      <div class="hero-btns">
+        <a href="/products" class="btn btn-lg btn-primary" style="background:#fff;color:var(--primary)">Shop Now 🛍️</a>
+        <a href="/products?featured=true" class="btn btn-lg hero-btn-outline">New Arrivals</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Trust Bar -->
+  <div class="trust-bar">
+    <div class="trust-item">📦 Free Delivery Above ₹999</div>
+    <div class="trust-item">✅ WhatsApp Support</div>
+    <div class="trust-item">🔄 Easy Returns</div>
+    <div class="trust-item">🇮🇳 Made for India</div>
+  </div>
+
+  <!-- How to Order -->
+  <section class="section">
+    <div class="container">
+      <div class="banner-strip">
+        <h3>💬 How to Order</h3>
+        <p>Browse → Add to Cart → Checkout → Pay via WhatsApp (UPI or COD) → We deliver! 🚚</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Featured Products -->
+  <section class="section" style="padding-top:0">
+    <div class="container">
+      <h2 class="section-title">✨ Featured Picks</h2>
+      <p class="section-subtitle">Handpicked styles our customers love</p>
+      <div id="featured-grid" class="product-grid"></div>
+      <div style="text-align:center;margin-top:32px">
+        <a href="/products" class="btn btn-outline btn-lg">View All Products →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Categories -->
+  <section class="section" style="background:#fff">
+    <div class="container">
+      <h2 class="section-title">🗂️ Shop by Category</h2>
+      <p class="section-subtitle">Find your perfect style</p>
+      <div id="categories-grid" class="categories-grid"></div>
+    </div>
+  </section>
+
+  <!-- New Arrivals -->
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">🆕 New Arrivals</h2>
+      <p class="section-subtitle">Fresh styles just landed</p>
+      <div id="new-arrivals-grid" class="product-grid"></div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div style="font-size:1.5rem;font-weight:800;margin-bottom:8px">👗 Clothyk</div>
+    <p style="opacity:.7;margin-bottom:16px">Trendy dresses from local boutiques across India</p>
+    <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin-bottom:16px">
+      <a href="/products">Shop</a>
+      <a href="/cart">Cart</a>
+      <a href="/wishlist">Wishlist</a>
+    </div>
+    <p style="opacity:.5;font-size:0.85rem">© 2024 Clothyk. All rights reserved. | Orders via WhatsApp only</p>
+  </footer>
+
+  <div id="toast-container"></div>
+  <script src="/static/js/shared.js"></script>
+  <script>
+    const CATEGORY_ICONS = {
+      "Kurti": "👘", "Saree": "🥻", "Dress": "👗", "Lehenga": "✨",
+      "Top": "👚", "Anarkali": "🌸", "Maxi": "💃", "Gown": "👸",
+      "Co-ord": "🎀", "Ethnic": "🪷", "Western": "⭐", "Party": "🎉"
+    };
+
+    async function loadFeatured() {
+      const grid = document.getElementById("featured-grid");
+      skeletonCards(grid, 4);
+      try {
+        const products = await apiFetch("/api/products/featured");
+        if (!products.length) {
+          grid.innerHTML = '<p style="color:var(--muted);text-align:center;grid-column:1/-1">No featured products yet.</p>';
+          return;
+        }
+        grid.innerHTML = products.map(p => renderProductCard(p)).join("");
+      } catch(e) {
+        grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1">Failed to load products.</p>';
+      }
+    }
+
+    async function loadCategories() {
+      const grid = document.getElementById("categories-grid");
+      try {
+        const cats = await apiFetch("/api/products/categories");
+        if (!cats.length) { grid.innerHTML = '<p style="color:var(--muted)">No categories yet.</p>'; return; }
+        grid.innerHTML = cats.map(cat => `
+          <div class="category-card" onclick="window.location='/products?category=${encodeURIComponent(cat)}'">
+            <div class="category-icon">${CATEGORY_ICONS[cat] || '🏷️'}</div>
+            <div class="category-name">${cat}</div>
+          </div>
+        `).join("");
+      } catch(e) { grid.innerHTML = ""; }
+    }
+
+    async function loadNewArrivals() {
+      const grid = document.getElementById("new-arrivals-grid");
+      skeletonCards(grid, 4);
+      try {
+        const products = await apiFetch("/api/products/?sort=latest");
+        const sliced = products.slice(0, 4);
+        grid.innerHTML = sliced.map(p => renderProductCard(p)).join("");
+      } catch(e) {
+        grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1">Failed to load.</p>';
+      }
+    }
+
+    function toggleMobileMenu() {
+      const links = document.querySelector(".nav-links");
+      links.style.display = links.style.display === "flex" ? "none" : "flex";
+      links.style.flexDirection = "column";
+      links.style.position = "absolute";
+      links.style.top = "64px";
+      links.style.left = "0";
+      links.style.right = "0";
+      links.style.background = "#fff";
+      links.style.padding = "16px 24px";
+      links.style.borderBottom = "1px solid var(--border)";
+      links.style.zIndex = "99";
+    }
+
+    loadFeatured();
+    loadCategories();
+    loadNewArrivals();
+  </script>
+</body>
+</html>

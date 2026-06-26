@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shopkeepers — Clothyk Admin</title>
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <link rel="stylesheet" href="/static/css/admin.css">
+</head>
+<body>
+<div class="admin-layout">
+  {% set active = 'shopkeepers' %}
+  {% include 'admin/_sidebar.html' %}
+
+  <div class="admin-main">
+    <div class="admin-topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+        <span class="admin-topbar-title">Shopkeepers</span>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openModal()">+ Add Shopkeeper</button>
+    </div>
+
+    <div class="admin-content">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Code</th><th>Shop Name</th><th>Shopkeeper</th><th>Contact</th><th>Products Listed</th><th>Total Sold</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="sk-body">
+            <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="sk-modal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-title">Add Shopkeeper</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div id="modal-alert"></div>
+    <div class="form-group">
+      <label class="form-label">Shop Name *</label>
+      <input class="form-control" id="shop_name" placeholder="e.g. Priya Fashion House">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Shopkeeper Name *</label>
+      <input class="form-control" id="shopkeeper_name" placeholder="e.g. Priya Sharma">
+    </div>
+    <div class="form-group">
+      <label class="form-label">WhatsApp Number *</label>
+      <input class="form-control" id="contact" placeholder="91XXXXXXXXXX">
+    </div>
+    <div style="display:flex;gap:12px;margin-top:8px">
+      <button class="btn btn-primary btn-lg" style="flex:1" id="submit-btn" onclick="saveShopkeeper()">Save</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="/static/js/shared.js"></script>
+<script>
+let editingId = null;
+
+async function loadShopkeepers() {
+  try {
+    const sks = await apiFetch("/api/shopkeepers/admin/all");
+    const body = document.getElementById("sk-body");
+    if (!sks.length) {
+      body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">No shopkeepers yet.</td></tr>';
+      return;
+    }
+    body.innerHTML = sks.map(s => `
+      <tr>
+        <td><strong style="color:var(--primary)">${s.code}</strong></td>
+        <td><strong>${s.shop_name}</strong></td>
+        <td>${s.shopkeeper_name}</td>
+        <td><a href="https://wa.me/${s.contact}" target="_blank" style="color:var(--primary)">${s.contact}</a></td>
+        <td>${s.total_products}</td>
+        <td>${s.total_sold}</td>
+        <td>
+          <button class="btn btn-outline btn-sm" onclick='openEdit(${JSON.stringify(s)})'>Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteSK(${s.id},'${s.shop_name}')">Delete</button>
+        </td>
+      </tr>
+    `).join("");
+  } catch(e) {
+    showToast("Failed to load shopkeepers", "error");
+  }
+}
+
+function openModal() {
+  editingId = null;
+  document.getElementById("modal-title").textContent = "Add Shopkeeper";
+  document.getElementById("shop_name").value = "";
+  document.getElementById("shopkeeper_name").value = "";
+  document.getElementById("contact").value = "";
+  document.getElementById("modal-alert").innerHTML = "";
+  document.getElementById("sk-modal").classList.add("open");
+}
+
+function openEdit(s) {
+  editingId = s.id;
+  document.getElementById("modal-title").textContent = "Edit Shopkeeper";
+  document.getElementById("shop_name").value = s.shop_name;
+  document.getElementById("shopkeeper_name").value = s.shopkeeper_name;
+  document.getElementById("contact").value = s.contact;
+  document.getElementById("modal-alert").innerHTML = "";
+  document.getElementById("sk-modal").classList.add("open");
+}
+
+function closeModal() { document.getElementById("sk-modal").classList.remove("open"); }
+
+async function saveShopkeeper() {
+  const btn = document.getElementById("submit-btn");
+  btn.disabled = true; btn.textContent = "Saving...";
+  const data = {
+    shop_name: document.getElementById("shop_name").value.trim(),
+    shopkeeper_name: document.getElementById("shopkeeper_name").value.trim(),
+    contact: document.getElementById("contact").value.trim()
+  };
+  if (!data.shop_name || !data.shopkeeper_name || !data.contact) {
+    document.getElementById("modal-alert").innerHTML = '<div class="alert alert-danger">All fields required</div>';
+    btn.disabled = false; btn.textContent = "Save";
+    return;
+  }
+  try {
+    const url = editingId ? `/api/shopkeepers/admin/${editingId}` : "/api/shopkeepers/admin/add";
+    const method = editingId ? "PUT" : "POST";
+    await apiFetch(url, { method, body: JSON.stringify(data) });
+    showToast(editingId ? "Updated! ✅" : "Shopkeeper added! ✅");
+    closeModal();
+    loadShopkeepers();
+  } catch(e) {
+    document.getElementById("modal-alert").innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+  }
+  btn.disabled = false; btn.textContent = "Save";
+}
+
+async function deleteSK(id, name) {
+  if (!confirm(`Delete shopkeeper "${name}"?`)) return;
+  try {
+    await apiFetch(`/api/shopkeepers/admin/${id}`, { method: "DELETE" });
+    showToast("Deleted", "warning");
+    loadShopkeepers();
+  } catch(e) { showToast(e.message, "error"); }
+}
+
+async function logout() {
+  await apiFetch("/api/auth/logout", { method: "POST" });
+  window.location = "/admin/login";
+}
+
+loadShopkeepers();
+</script>
+</body>
+</html>

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title id="page-title">Product — Clothyk</title>
+  <meta name="description" id="page-desc" content="">
+  <meta property="og:title" id="og-title" content="">
+  <meta property="og:description" id="og-desc" content="">
+  <meta property="og:image" id="og-image" content="">
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <style>
+    .product-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; padding: 48px 0; }
+    .product-img-wrap { position: sticky; top: 80px; }
+    .product-img-wrap img { width: 100%; border-radius: 16px; box-shadow: var(--shadow-lg); aspect-ratio: 4/5; object-fit: cover; }
+    .product-name { font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
+    .product-price { font-size: 2rem; color: var(--primary); font-weight: 900; margin-bottom: 16px; }
+    .product-code { color: var(--muted); font-size: 0.9rem; margin-bottom: 24px; }
+    .selector-label { font-weight: 700; margin-bottom: 10px; font-size: 0.9rem; text-transform: uppercase; letter-spacing: .5px; }
+    .chip-group { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+    .chip {
+      padding: 8px 16px; border-radius: 999px; border: 2px solid var(--border);
+      cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: all .2s;
+      background: #fff;
+    }
+    .chip:hover { border-color: var(--primary); color: var(--primary); }
+    .chip.selected { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .action-btns { display: flex; gap: 12px; margin-bottom: 24px; }
+    .product-desc { color: var(--muted); line-height: 1.7; margin-bottom: 24px; }
+    .badge-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+    .related-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+    @media (max-width: 768px) {
+      .product-detail { grid-template-columns: 1fr; gap: 24px; }
+      .product-img-wrap { position: static; }
+      .product-name { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="/" class="nav-logo">👗 Clothyk</a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/products">Shop</a>
+      <a href="/wishlist">Wishlist</a>
+    </div>
+    <div class="nav-actions">
+      <button class="nav-icon-btn" onclick="window.location='/wishlist'">❤️ <span id="wishlist-badge" class="nav-badge" style="display:none">0</span></button>
+      <button class="nav-icon-btn" onclick="window.location='/cart'">🛍️ <span id="cart-badge" class="nav-badge" style="display:none">0</span></button>
+    </div>
+  </nav>
+
+  <div class="container">
+    <!-- Breadcrumb -->
+    <div style="padding:16px 0;color:var(--muted);font-size:0.9rem">
+      <a href="/" style="color:var(--primary)">Home</a> /
+      <a href="/products" style="color:var(--primary)">Shop</a> /
+      <span id="breadcrumb-name">Loading...</span>
+    </div>
+
+    <!-- Skeleton -->
+    <div id="skeleton" class="product-detail">
+      <div class="skeleton" style="aspect-ratio:4/5;border-radius:16px"></div>
+      <div>
+        <div class="skeleton skeleton-text" style="width:80%;height:28px;margin-bottom:16px"></div>
+        <div class="skeleton skeleton-text" style="width:30%;height:36px;margin-bottom:32px"></div>
+        <div class="skeleton skeleton-text" style="width:100%;margin-bottom:8px"></div>
+        <div class="skeleton skeleton-text" style="width:90%"></div>
+      </div>
+    </div>
+
+    <!-- Product Detail -->
+    <div id="product-content" class="product-detail" style="display:none">
+      <div class="product-img-wrap">
+        <img id="product-img" src="" alt="">
+      </div>
+      <div>
+        <div class="badge-row">
+          <span id="category-badge" class="badge badge-primary"></span>
+          <span id="stock-badge" class="badge badge-success">In Stock</span>
+        </div>
+        <h1 class="product-name" id="product-name"></h1>
+        <div class="product-price" id="product-price"></div>
+        <div class="product-code" id="product-code"></div>
+        <p class="product-desc" id="product-desc"></p>
+
+        <!-- Size -->
+        <div>
+          <div class="selector-label">Select Size</div>
+          <div class="chip-group" id="size-chips"></div>
+        </div>
+
+        <!-- Color -->
+        <div>
+          <div class="selector-label">Select Color</div>
+          <div class="chip-group" id="color-chips"></div>
+        </div>
+
+        <!-- Actions -->
+        <div class="action-btns">
+          <button class="btn btn-primary btn-lg" style="flex:1" onclick="addToCart()">
+            🛍️ Add to Cart
+          </button>
+          <button class="btn btn-outline" id="wishlist-toggle-btn" onclick="toggleWishlistProduct()" title="Wishlist" style="padding:14px 18px">
+            🤍
+          </button>
+        </div>
+        <a href="/checkout" class="btn btn-success btn-lg btn-block">⚡ Buy Now</a>
+
+        <!-- Info Cards -->
+        <div style="margin-top:24px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="background:#F3F0FF;border-radius:10px;padding:16px;text-align:center">
+            <div style="font-size:1.4rem">🚚</div>
+            <div style="font-weight:600;font-size:0.85rem">Fast Delivery</div>
+            <div style="color:var(--muted);font-size:0.8rem">5-7 working days</div>
+          </div>
+          <div style="background:#F3F0FF;border-radius:10px;padding:16px;text-align:center">
+            <div style="font-size:1.4rem">💬</div>
+            <div style="font-weight:600;font-size:0.85rem">Order via WhatsApp</div>
+            <div style="color:var(--muted);font-size:0.8rem">UPI or Cash on Delivery</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Related Products -->
+    <section id="related-section" style="display:none;margin-top:48px">
+      <h2 class="section-title">You May Also Like</h2>
+      <div class="related-grid" id="related-grid"></div>
+    </section>
+  </div>
+
+  <footer>
+    <p style="opacity:.7">© 2024 Clothyk. Trendy dresses across India 🇮🇳</p>
+  </footer>
+
+  <div id="toast-container"></div>
+  <script src="/static/js/shared.js"></script>
+  <script>
+    const productId = "{{ product_id }}";
+    let product = null;
+    let selectedSize = null;
+    let selectedColor = null;
+
+    async function loadProduct() {
+      try {
+        product = await apiFetch(`/api/products/${productId}`);
+
+        // SEO
+        document.getElementById("page-title").textContent = `${product.name} — Clothyk`;
+        document.getElementById("page-desc").content = product.description || product.name;
+        document.getElementById("og-title").content = product.name;
+        document.getElementById("og-desc").content = product.description || "";
+        document.getElementById("og-image").content = product.image || "";
+        document.getElementById("breadcrumb-name").textContent = product.name;
+
+        // Image
+        document.getElementById("product-img").src = product.image || "/static/images/placeholder.svg";
+        document.getElementById("product-img").alt = product.name;
+
+        // Text
+        document.getElementById("product-name").textContent = product.name;
+        document.getElementById("product-price").textContent = formatPrice(product.our_price);
+        document.getElementById("product-code").textContent = `Code: ${product.shopkeeper_code}`;
+        document.getElementById("product-desc").textContent = product.description || "";
+        if (product.category) {
+          document.getElementById("category-badge").textContent = product.category;
+        }
+        if (product.stock < 1) {
+          document.getElementById("stock-badge").textContent = "Out of Stock";
+          document.getElementById("stock-badge").className = "badge badge-danger";
+        }
+
+        // Sizes
+        const sizeWrap = document.getElementById("size-chips");
+        const sizes = Array.isArray(product.sizes) ? product.sizes : JSON.parse(product.sizes || "[]");
+        sizeWrap.innerHTML = sizes.map(s => `<div class="chip" onclick="selectChip(this,'size','${s}')">${s}</div>`).join("");
+        if (sizes.length === 1) { selectChip(sizeWrap.firstChild, "size", sizes[0]); }
+
+        // Colors
+        const colorWrap = document.getElementById("color-chips");
+        const colors = Array.isArray(product.colors) ? product.colors : JSON.parse(product.colors || "[]");
+        colorWrap.innerHTML = colors.map(c => `<div class="chip" onclick="selectChip(this,'color','${c}')">${c}</div>`).join("");
+        if (colors.length === 1) { selectChip(colorWrap.firstChild, "color", colors[0]); }
+
+        // Wishlist btn
+        updateWishlistBtn();
+
+        // Show
+        document.getElementById("skeleton").style.display = "none";
+        document.getElementById("product-content").style.display = "grid";
+
+        loadRelated();
+      } catch(e) {
+        document.getElementById("skeleton").innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:48px"><h3>Product not found</h3><a href="/products" class="btn btn-primary" style="margin-top:16px">Back to Shop</a></div>`;
+      }
+    }
+
+    function selectChip(el, type, value) {
+      const group = el.parentElement;
+      group.querySelectorAll(".chip").forEach(c => c.classList.remove("selected"));
+      el.classList.add("selected");
+      if (type === "size") selectedSize = value;
+      if (type === "color") selectedColor = value;
+    }
+
+    function addToCart() {
+      if (!selectedSize) { showToast("Please select a size", "error"); return; }
+      if (!selectedColor) { showToast("Please select a color", "error"); return; }
+      if (product.stock < 1) { showToast("Out of stock", "error"); return; }
+      Cart.add(product, selectedSize, selectedColor);
+    }
+
+    function toggleWishlistProduct() {
+      if (!product) return;
+      Wishlist.toggle(product);
+      updateWishlistBtn();
+    }
+
+    function updateWishlistBtn() {
+      const btn = document.getElementById("wishlist-toggle-btn");
+      btn.textContent = Wishlist.has(productId) ? "❤️" : "🤍";
+    }
+
+    async function loadRelated() {
+      try {
+        const related = await apiFetch(`/api/products/${productId}/related`);
+        if (!related.length) return;
+        document.getElementById("related-section").style.display = "block";
+        document.getElementById("related-grid").innerHTML = related.map(p => renderProductCard(p)).join("");
+      } catch(e) {}
+    }
+
+    loadProduct();
+  </script>
+</body>
+</html>

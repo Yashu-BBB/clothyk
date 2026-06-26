@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orders — Clothyk Admin</title>
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <link rel="stylesheet" href="/static/css/admin.css">
+  <style>
+    .filter-bar { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
+    .filter-bar select, .filter-bar input { padding:8px 12px; border:2px solid var(--border); border-radius:8px; font-size:0.9rem; }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  {% set active = 'orders' %}
+  {% include 'admin/_sidebar.html' %}
+
+  <div class="admin-main">
+    <div class="admin-topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+        <span class="admin-topbar-title">Orders</span>
+      </div>
+    </div>
+
+    <div class="admin-content">
+      <div class="filter-bar">
+        <select id="filter-status" onchange="loadOrders()">
+          <option value="">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="shipped">Shipped</option>
+          <option value="delivered">Delivered</option>
+          <option value="cancelled">Cancelled</option>
+          <option value="refunded">Refunded</option>
+        </select>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Order</th><th>Customer</th><th>Product</th>
+              <th>Amount</th><th>Profit</th><th>Payment</th>
+              <th>Status</th><th>Date</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="orders-body">
+            <tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Update Status Modal -->
+<div class="modal-overlay" id="status-modal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3 class="modal-title">Update Order</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div id="modal-alert"></div>
+    <div style="margin-bottom:12px;padding:12px;background:#F3F0FF;border-radius:8px;font-size:0.9rem" id="order-info"></div>
+
+    <div class="form-group">
+      <label class="form-label">Order Status</label>
+      <select class="form-control" id="new-status">
+        <option value="pending">Pending</option>
+        <option value="confirmed">Confirmed</option>
+        <option value="shipped">Shipped</option>
+        <option value="delivered">Delivered</option>
+        <option value="cancelled">Cancelled</option>
+        <option value="refunded">Refunded</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Payment Status</label>
+      <select class="form-control" id="new-payment-status">
+        <option value="">— no change —</option>
+        <option value="pending">Pending</option>
+        <option value="received">Received</option>
+        <option value="verified">Verified</option>
+        <option value="failed">Failed</option>
+      </select>
+    </div>
+
+    <div id="shipping-fields" style="display:none">
+      <div class="form-group">
+        <label class="form-label">Tracking ID</label>
+        <input class="form-control" id="tracking-id" placeholder="e.g. DLVY1234567890">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Courier Name</label>
+        <input class="form-control" id="courier-name" placeholder="e.g. Delhivery, Shiprocket, Blue Dart">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Refund Status</label>
+      <select class="form-control" id="refund-status">
+        <option value="">— no change —</option>
+        <option value="none">None</option>
+        <option value="pending">Pending</option>
+        <option value="processed">Processed</option>
+      </select>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:8px">
+      <button class="btn btn-primary btn-lg" style="flex:1" onclick="saveStatus()">Update Order</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="/static/js/shared.js"></script>
+<script>
+const STATUS_COLORS = { pending:'warning', confirmed:'primary', shipped:'primary', delivered:'success', cancelled:'danger', refunded:'muted' };
+let currentOrderId = null;
+
+async function loadOrders() {
+  const status = document.getElementById("filter-status").value;
+  const url = `/api/orders/admin/all${status ? `?status=${status}` : ''}`;
+  try {
+    const orders = await apiFetch(url);
+    const body = document.getElementById("orders-body");
+    if (!orders.length) {
+      body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">No orders found</td></tr>';
+      return;
+    }
+    body.innerHTML = orders.map(o => `
+      <tr>
+        <td style="font-family:monospace;font-size:0.75rem">${o.id.slice(0,8)}...<br><span style="color:var(--muted)">${o.shopkeeper_code||''}</span></td>
+        <td>
+          <strong>${o.customer_name}</strong><br>
+          <a href="https://wa.me/91${o.customer_phone}" target="_blank" style="color:var(--primary);font-size:0.8rem">${o.customer_phone}</a><br>
+          <span style="color:var(--muted);font-size:0.75rem">${o.customer_city}</span>
+        </td>
+        <td>
+          <strong>${o.product_name}</strong><br>
+          <span style="color:var(--muted);font-size:0.8rem">Size: ${o.size} · ${o.color}</span>
+          ${o.tracking_id ? `<br><span style="font-size:0.75rem">📦 ${o.tracking_id}</span>` : ''}
+        </td>
+        <td><strong>${formatPrice(o.our_price)}</strong></td>
+        <td style="color:var(--success);font-weight:700">+${formatPrice(o.profit)}</td>
+        <td>
+          <span class="badge badge-${o.payment_type === 'upi' ? 'primary' : 'warning'}">${(o.payment_type||'').toUpperCase()}</span><br>
+          <span style="font-size:0.75rem;color:var(--muted)">${o.payment_status||''}</span>
+        </td>
+        <td><span class="badge badge-${STATUS_COLORS[o.status]||'muted'}">${o.status}</span>
+          ${o.refund_status && o.refund_status !== 'none' ? `<br><span class="badge badge-warning" style="margin-top:4px">${o.refund_status}</span>` : ''}
+        </td>
+        <td style="font-size:0.8rem;color:var(--muted)">${new Date(o.created_at).toLocaleDateString('en-IN')}</td>
+        <td><button class="btn btn-outline btn-sm" onclick='openUpdate(${JSON.stringify(o)})'>Update</button></td>
+      </tr>
+    `).join("");
+  } catch(e) {
+    showToast("Failed to load orders", "error");
+  }
+}
+
+function openUpdate(order) {
+  currentOrderId = order.id;
+  document.getElementById("new-status").value = order.status;
+  document.getElementById("new-payment-status").value = "";
+  document.getElementById("tracking-id").value = order.tracking_id || "";
+  document.getElementById("courier-name").value = order.courier_name || "";
+  document.getElementById("refund-status").value = "";
+  document.getElementById("modal-alert").innerHTML = "";
+  document.getElementById("order-info").innerHTML = `
+    <strong>${order.customer_name}</strong> — ${order.product_name}<br>
+    Size: ${order.size} · Color: ${order.color} · Amount: <strong>${formatPrice(order.our_price)}</strong>
+  `;
+  toggleShippingFields();
+  document.getElementById("status-modal").classList.add("open");
+}
+
+function closeModal() { document.getElementById("status-modal").classList.remove("open"); }
+
+document.getElementById("new-status").addEventListener("change", toggleShippingFields);
+function toggleShippingFields() {
+  const status = document.getElementById("new-status").value;
+  document.getElementById("shipping-fields").style.display = status === "shipped" ? "block" : "none";
+}
+
+async function saveStatus() {
+  const payload = {
+    status: document.getElementById("new-status").value,
+    payment_status: document.getElementById("new-payment-status").value || undefined,
+    tracking_id: document.getElementById("tracking-id").value || undefined,
+    courier_name: document.getElementById("courier-name").value || undefined,
+    refund_status: document.getElementById("refund-status").value || undefined
+  };
+  // Remove undefined
+  Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
+
+  try {
+    await apiFetch(`/api/orders/admin/${currentOrderId}`, { method: "PUT", body: JSON.stringify(payload) });
+    showToast("Order updated! ✅ WhatsApp notification sent.");
+    closeModal();
+    loadOrders();
+  } catch(e) {
+    document.getElementById("modal-alert").innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+  }
+}
+
+async function logout() {
+  await apiFetch("/api/auth/logout", { method: "POST" });
+  window.location = "/admin/login";
+}
+
+loadOrders();
+</script>
+</body>
+</html>

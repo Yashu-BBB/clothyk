@@ -1,0 +1,81 @@
+/* ═══════════════════════════════════════
+   CLOTHYK ADMIN — Shared Styles
+═══════════════════════════════════════ */
+.admin-layout { display: flex; min-height: 100vh; }
+
+/* ─── SIDEBAR ─────────────────────────────────────── */
+.sidebar {
+  width: 240px;
+  background: linear-gradient(180deg, var(--primary-dark) 0%, var(--primary) 100%);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 50;
+  transition: transform .3s;
+}
+.sidebar-logo { padding: 24px 20px 16px; border-bottom: 1px solid rgba(255,255,255,.1); }
+.sidebar-logo h2 { font-size: 1.3rem; font-weight: 800; }
+.sidebar-logo p { opacity: .6; font-size: 0.75rem; }
+.sidebar-nav { flex: 1; padding: 12px 0; overflow-y: auto; }
+.nav-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px; color: rgba(255,255,255,.75);
+  font-size: 0.9rem; font-weight: 500;
+  transition: all .2s; cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.nav-item:hover { background: rgba(255,255,255,.1); color: #fff; border-left-color: rgba(255,255,255,.4); }
+.nav-item.active { background: rgba(255,255,255,.15); color: #fff; border-left-color: #fff; font-weight: 700; }
+.nav-item .icon { font-size: 1.1rem; width: 20px; text-align: center; }
+.sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,.1); }
+.logout-btn {
+  display: flex; align-items: center; gap: 8px;
+  color: rgba(255,255,255,.7); font-size: 0.85rem;
+  background: none; border: none; cursor: pointer;
+  width: 100%; padding: 8px 0;
+}
+.logout-btn:hover { color: #fff; }
+
+/* ─── MAIN CONTENT ────────────────────────────────── */
+.admin-main { margin-left: 240px; flex: 1; min-width: 0; }
+.admin-topbar {
+  background: #fff; border-bottom: 1px solid var(--border);
+  padding: 0 24px; height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 40;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.admin-topbar-title { font-size: 1.1rem; font-weight: 700; }
+.admin-content { padding: 28px 24px; }
+
+/* ─── STAT CARDS ──────────────────────────────────── */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
+.stat-card {
+  background: #fff; border-radius: var(--radius);
+  padding: 20px; box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 6px;
+  border-top: 3px solid var(--primary);
+}
+.stat-card.green { border-top-color: var(--success); }
+.stat-card.amber { border-top-color: var(--warning); }
+.stat-card.red { border-top-color: var(--danger); }
+.stat-label { font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+.stat-value { font-size: 1.7rem; font-weight: 900; color: var(--text); }
+.stat-sub { font-size: 0.8rem; color: var(--muted); }
+
+/* ─── DATA TABLE ──────────────────────────────────── */
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+.page-header h2 { font-size: 1.4rem; font-weight: 800; }
+
+/* ─── MOBILE SIDEBAR ──────────────────────────────── */
+.sidebar-toggle { display: none; background: none; border: none; font-size: 1.5rem; cursor: pointer; }
+@media (max-width: 900px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .admin-main { margin-left: 0; }
+  .sidebar-toggle { display: block; }
+  .admin-content { padding: 16px; }
+  .stat-grid { grid-template-columns: repeat(2, 1fr); }
+}

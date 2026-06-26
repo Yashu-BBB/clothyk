@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Products — Clothyk Admin</title>
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <link rel="stylesheet" href="/static/css/admin.css">
+  <style>
+    .product-thumb { width: 48px; height: 60px; object-fit: cover; border-radius: 6px; }
+    .img-preview { width: 100%; max-height: 200px; object-fit: cover; border-radius: 10px; margin-top: 8px; display: none; }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  {% set active = 'products' %}
+  {% include 'admin/_sidebar.html' %}
+
+  <div class="admin-main">
+    <div class="admin-topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+        <span class="admin-topbar-title">Products</span>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openModal()">+ Add Product</button>
+    </div>
+
+    <div class="admin-content">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Image</th><th>Name</th><th>Our Price</th><th>SK Price</th>
+              <th>Profit/unit</th><th>Stock</th><th>Code</th><th>Featured</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="products-body">
+            <tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="product-modal">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-title">Add Product</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div id="modal-alert"></div>
+    <form id="product-form" enctype="multipart/form-data">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Product Name *</label>
+          <input class="form-control" name="name" required placeholder="e.g. Floral Summer Dress">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <input class="form-control" name="category" placeholder="e.g. Kurti, Dress, Saree">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-control" name="description" rows="3" placeholder="Describe the product..."></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Our Price (₹) *</label>
+          <input class="form-control" name="our_price" type="number" min="1" step="0.01" required placeholder="e.g. 1299">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Shopkeeper Price (₹) *</label>
+          <input class="form-control" name="shopkeeper_price" type="number" min="1" step="0.01" required placeholder="e.g. 850">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Sizes (comma separated)</label>
+          <input class="form-control" name="sizes_raw" placeholder="S, M, L, XL, XXL">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Colors (comma separated)</label>
+          <input class="form-control" name="colors_raw" placeholder="Red, Black, White">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Stock</label>
+          <input class="form-control" name="stock" type="number" min="0" value="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Shopkeeper *</label>
+          <select class="form-control" name="shopkeeper_id" id="sk-select" required>
+            <option value="">Select shopkeeper...</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" name="featured" id="featured-cb" style="width:18px;height:18px"> Featured product
+        </label>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Product Image</label>
+        <input class="form-control" type="file" name="image" accept="image/*" onchange="previewImg(this)">
+        <img class="img-preview" id="img-preview">
+      </div>
+      <div style="display:flex;gap:12px;margin-top:8px">
+        <button type="submit" class="btn btn-primary btn-lg" style="flex:1" id="submit-btn">Save Product</button>
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="/static/js/shared.js"></script>
+<script>
+let editingId = null;
+
+async function loadProducts() {
+  try {
+    const products = await apiFetch("/api/products/admin/all");
+    const body = document.getElementById("products-body");
+    if (!products.length) {
+      body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">No products yet. Add your first product!</td></tr>';
+      return;
+    }
+    body.innerHTML = products.map(p => `
+      <tr>
+        <td><img src="${p.image || '/static/images/placeholder.svg'}" class="product-thumb" alt="${p.name}"></td>
+        <td><strong>${p.name}</strong><br><span style="color:var(--muted);font-size:0.8rem">${p.category || ''}</span></td>
+        <td><strong>${formatPrice(p.our_price)}</strong></td>
+        <td style="color:var(--muted)">${formatPrice(p.shopkeeper_price)}</td>
+        <td style="color:var(--success);font-weight:700">+${formatPrice(p.our_price - p.shopkeeper_price)}</td>
+        <td><span class="badge badge-${p.stock > 2 ? 'success' : p.stock > 0 ? 'warning' : 'danger'}">${p.stock}</span></td>
+        <td style="font-weight:700;color:var(--primary)">${p.shopkeeper_code || ''}</td>
+        <td>${p.featured ? '⭐' : '—'}</td>
+        <td>
+          <button class="btn btn-outline btn-sm" onclick='openEdit(${JSON.stringify(p)})'>Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteProduct('${p.id}','${p.name}')">Delete</button>
+        </td>
+      </tr>
+    `).join("");
+  } catch(e) {
+    showToast("Failed to load products: " + e.message, "error");
+  }
+}
+
+async function loadShopkeeperDropdown() {
+  try {
+    const sks = await apiFetch("/api/shopkeepers/admin/dropdown");
+    const sel = document.getElementById("sk-select");
+    sel.innerHTML = '<option value="">Select shopkeeper...</option>';
+    sks.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.id; opt.textContent = s.label;
+      sel.appendChild(opt);
+    });
+  } catch(e) {}
+}
+
+function openModal() {
+  editingId = null;
+  document.getElementById("modal-title").textContent = "Add Product";
+  document.getElementById("product-form").reset();
+  document.getElementById("img-preview").style.display = "none";
+  document.getElementById("modal-alert").innerHTML = "";
+  document.getElementById("product-modal").classList.add("open");
+  loadShopkeeperDropdown();
+}
+
+function openEdit(p) {
+  editingId = p.id;
+  document.getElementById("modal-title").textContent = "Edit Product";
+  document.getElementById("modal-alert").innerHTML = "";
+  const form = document.getElementById("product-form");
+  form.name.value = p.name;
+  form.category.value = p.category || "";
+  form.description.value = p.description || "";
+  form.our_price.value = p.our_price;
+  form.shopkeeper_price.value = p.shopkeeper_price;
+  form.sizes_raw.value = (p.sizes || []).join(", ");
+  form.colors_raw.value = (p.colors || []).join(", ");
+  form.stock.value = p.stock;
+  document.getElementById("featured-cb").checked = p.featured;
+  if (p.image) { document.getElementById("img-preview").src = p.image; document.getElementById("img-preview").style.display = "block"; }
+  document.getElementById("product-modal").classList.add("open");
+  loadShopkeeperDropdown().then(() => { if (p.shopkeeper_id) document.getElementById("sk-select").value = p.shopkeeper_id; });
+}
+
+function closeModal() {
+  document.getElementById("product-modal").classList.remove("open");
+}
+
+function previewImg(input) {
+  const preview = document.getElementById("img-preview");
+  if (input.files && input.files[0]) {
+    preview.src = URL.createObjectURL(input.files[0]);
+    preview.style.display = "block";
+  }
+}
+
+document.getElementById("product-form").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById("submit-btn");
+  btn.disabled = true; btn.textContent = "Saving...";
+
+  const fd = new FormData(this);
+  // Convert sizes/colors to JSON arrays
+  const sizesRaw = fd.get("sizes_raw") || "";
+  const colorsRaw = fd.get("colors_raw") || "";
+  fd.delete("sizes_raw"); fd.delete("colors_raw");
+  fd.set("sizes", JSON.stringify(sizesRaw.split(",").map(s => s.trim()).filter(Boolean)));
+  fd.set("colors", JSON.stringify(colorsRaw.split(",").map(c => c.trim()).filter(Boolean)));
+  fd.set("featured", document.getElementById("featured-cb").checked);
+
+  try {
+    const url = editingId ? `/api/products/admin/${editingId}` : "/api/products/admin/add";
+    const method = editingId ? "PUT" : "POST";
+    const res = await fetch(url, { method, body: fd });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "Failed"); }
+    showToast(editingId ? "Product updated! ✅" : "Product added! ✅");
+    closeModal();
+    loadProducts();
+  } catch(err) {
+    document.getElementById("modal-alert").innerHTML = `<div class="alert alert-danger">⚠️ ${err.message}</div>`;
+  }
+  btn.disabled = false; btn.textContent = "Save Product";
+});
+
+async function deleteProduct(id, name) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  try {
+    await apiFetch(`/api/products/admin/${id}`, { method: "DELETE" });
+    showToast("Product deleted", "warning");
+    loadProducts();
+  } catch(e) {
+    showToast("Delete failed: " + e.message, "error");
+  }
+}
+
+async function logout() {
+  await apiFetch("/api/auth/logout", { method: "POST" });
+  window.location = "/admin/login";
+}
+
+loadProducts();
+</script>
+</body>
+</html>

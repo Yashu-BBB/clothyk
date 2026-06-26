@@ -1,0 +1,27 @@
+<!-- Admin Sidebar Macro — included in all admin pages -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <h2>👗 Clothyk</h2>
+    <p>Admin Panel</p>
+  </div>
+  <nav class="sidebar-nav">
+    <a href="/admin/dashboard" class="nav-item {% if active == 'dashboard' %}active{% endif %}">
+      <span class="icon">📊</span> Dashboard
+    </a>
+    <a href="/admin/products" class="nav-item {% if active == 'products' %}active{% endif %}">
+      <span class="icon">👗</span> Products
+    </a>
+    <a href="/admin/shopkeepers" class="nav-item {% if active == 'shopkeepers' %}active{% endif %}">
+      <span class="icon">🏪</span> Shopkeepers
+    </a>
+    <a href="/admin/orders" class="nav-item {% if active == 'orders' %}active{% endif %}">
+      <span class="icon">📦</span> Orders
+    </a>
+    <a href="/admin/analytics" class="nav-item {% if active == 'analytics' %}active{% endif %}">
+      <span class="icon">📈</span> Analytics
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <button class="logout-btn" onclick="logout()">🚪 Logout</button>
+  </div>
+</aside>

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analytics — Clothyk Admin</title>
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <link rel="stylesheet" href="/static/css/admin.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    .chart-card { background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); padding:20px; margin-bottom:20px; }
+    .chart-card h3 { font-size:0.95rem; font-weight:700; margin-bottom:16px; color:var(--text); }
+    .charts-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:20px; }
+    .charts-grid-3 { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:20px; }
+    .section-head { font-size:1.2rem; font-weight:800; margin:28px 0 16px; padding-bottom:8px; border-bottom:2px solid var(--border); }
+    .sk-table-wrap { overflow-x:auto; }
+    @media (max-width:600px) { .charts-grid, .charts-grid-3 { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  {% set active = 'analytics' %}
+  {% include 'admin/_sidebar.html' %}
+
+  <div class="admin-main">
+    <div class="admin-topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+        <span class="admin-topbar-title">Analytics</span>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="loadAnalytics()">🔄 Refresh</button>
+    </div>
+
+    <div class="admin-content">
+      <div id="loading" style="text-align:center;padding:48px;color:var(--muted)">
+        <div style="font-size:2rem;margin-bottom:8px">📊</div>
+        Loading analytics...
+      </div>
+      <div id="analytics-content" style="display:none">
+
+        <!-- All Time Stat Cards -->
+        <div class="section-head">🏆 All Time</div>
+        <div class="stat-grid" id="alltime-stats"></div>
+
+        <!-- Time Based -->
+        <div class="section-head">📅 Period Comparison</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px" id="period-cards"></div>
+
+        <!-- Charts Row 1 -->
+        <div class="section-head">📈 Revenue & Orders</div>
+        <div class="charts-grid">
+          <div class="chart-card"><h3>Revenue vs Profit (This Month)</h3><canvas id="revProfitChart"></canvas></div>
+          <div class="chart-card"><h3>Orders — This Month vs Last Month</h3><canvas id="ordersCompChart"></canvas></div>
+        </div>
+
+        <!-- Charts Row 2 -->
+        <div class="charts-grid-3">
+          <div class="chart-card"><h3>Sales by Category</h3><canvas id="categoryChart"></canvas></div>
+          <div class="chart-card"><h3>UPI vs COD</h3><canvas id="paymentChart"></canvas></div>
+          <div class="chart-card"><h3>Order Status Breakdown</h3><canvas id="statusChart"></canvas></div>
+        </div>
+
+        <!-- Charts Row 3 -->
+        <div class="charts-grid">
+          <div class="chart-card"><h3>Top 5 Most Sold Products</h3><canvas id="topSoldChart"></canvas></div>
+          <div class="chart-card"><h3>Top 5 Most Viewed Products</h3><canvas id="topViewedChart"></canvas></div>
+        </div>
+
+        <!-- Charts Row 4 -->
+        <div class="charts-grid">
+          <div class="chart-card"><h3>Peak Ordering Hours</h3><canvas id="hoursChart"></canvas></div>
+          <div class="chart-card"><h3>Reviews Rating Breakdown</h3><canvas id="ratingsChart"></canvas></div>
+        </div>
+
+        <!-- Orders Analytics -->
+        <div class="section-head">📦 Orders Analytics</div>
+        <div class="stat-grid" id="orders-stats"></div>
+
+        <!-- Customer Analytics -->
+        <div class="section-head">👥 Customer Analytics</div>
+        <div class="stat-grid" id="customer-stats"></div>
+
+        <!-- Top Cities -->
+        <div class="charts-grid-3" style="margin-bottom:20px">
+          <div class="chart-card" style="grid-column:1/-1">
+            <h3>Top Cities</h3>
+            <div id="cities-list" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          </div>
+        </div>
+
+        <!-- Shopkeeper Analytics -->
+        <div class="section-head">🏪 Shopkeeper Analytics</div>
+        <div class="stat-grid" id="sk-summary-stats" style="margin-bottom:16px"></div>
+        <div class="sk-table-wrap">
+          <table>
+            <thead><tr><th>Code</th><th>Shop</th><th>Sold</th><th>Revenue</th><th>Profit</th><th>Amount Owed</th></tr></thead>
+            <tbody id="sk-table-body"></tbody>
+          </table>
+        </div>
+
+        <!-- Financial Summary -->
+        <div class="section-head">💰 Financial Summary</div>
+        <div class="stat-grid" id="financial-stats"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="/static/js/shared.js"></script>
+<script>
+const PRIMARY = '#6C3FC7';
+const COLORS = ['#6C3FC7','#8B5CF6','#F59E0B','#10B981','#EF4444','#3B82F6','#EC4899','#14B8A6','#F97316','#6366F1'];
+
+function makeChart(id, type, labels, data, opts = {}) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  new Chart(ctx, {
+    type,
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: opts.single ? PRIMARY : COLORS,
+        borderColor: opts.line ? PRIMARY : undefined,
+        borderWidth: opts.line ? 2 : undefined,
+        fill: opts.fill || false,
+        tension: 0.4,
+        ...opts.dataset
+      }, ...(opts.datasets || [])]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: type === 'pie' || type === 'doughnut' || !!opts.legend } },
+      scales: (type === 'line' || type === 'bar') ? {
+        y: { beginAtZero: true, ticks: { callback: opts.money ? v => '₹' + v.toLocaleString('en-IN') : undefined } }
+      } : undefined,
+      ...opts.chartOpts
+    }
+  });
+}
+
+async function loadAnalytics() {
+  document.getElementById("loading").style.display = "block";
+  document.getElementById("analytics-content").style.display = "none";
+
+  try {
+    const d = await apiFetch("/api/analytics/overview");
+
+    // All time stats
+    document.getElementById("alltime-stats").innerHTML = `
+      <div class="stat-card"><div class="stat-label">Total Revenue</div><div class="stat-value">${formatPrice(d.all_time.revenue)}</div></div>
+      <div class="stat-card green"><div class="stat-label">Total Profit</div><div class="stat-value">${formatPrice(d.all_time.profit)}</div></div>
+      <div class="stat-card"><div class="stat-label">Total Orders</div><div class="stat-value">${d.all_time.orders}</div></div>
+      <div class="stat-card"><div class="stat-label">Products Listed</div><div class="stat-value">${d.all_time.products}</div></div>
+      <div class="stat-card"><div class="stat-label">Total Visitors</div><div class="stat-value">${d.all_time.visitors}</div></div>
+      <div class="stat-card"><div class="stat-label">Unique Buyers</div><div class="stat-value">${d.all_time.unique_buyers}</div></div>
+      <div class="stat-card amber"><div class="stat-label">Avg Order Value</div><div class="stat-value">${formatPrice(d.all_time.aov)}</div></div>
+      <div class="stat-card green"><div class="stat-label">Profit Margin</div><div class="stat-value">${d.all_time.profit_margin}%</div></div>
+      <div class="stat-card"><div class="stat-label">Total Reviews</div><div class="stat-value">${d.all_time.reviews_count}</div></div>
+      <div class="stat-card amber"><div class="stat-label">Avg Rating</div><div class="stat-value">⭐ ${d.all_time.avg_rating}</div></div>
+    `;
+
+    // Period cards
+    const periods = [['Today', d.today], ['This Week', d.this_week], ['This Month', d.this_month]];
+    document.getElementById("period-cards").innerHTML = periods.map(([label, p]) => `
+      <div style="background:#fff;border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)">
+        <div style="font-weight:800;font-size:1rem;margin-bottom:12px;color:var(--primary)">${label}</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:0.85rem">Orders</span><strong>${p.count}</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:0.85rem">Revenue</span><strong>${formatPrice(p.revenue)}</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:0.85rem">Profit</span><strong style="color:var(--success)">${formatPrice(p.profit)}</strong></div>
+        </div>
+      </div>
+    `).join("");
+
+    // Revenue vs Profit line chart
+    const dailyDates = Object.keys(d.daily_revenue).sort();
+    makeChart('revProfitChart', 'line',
+      dailyDates,
+      dailyDates.map(k => d.daily_revenue[k].revenue),
+      {
+        money: true, line: true,
+        datasets: [{
+          label: 'Profit',
+          data: dailyDates.map(k => d.daily_revenue[k].profit),
+          borderColor: '#10B981', backgroundColor: 'transparent', tension: 0.4, borderWidth: 2
+        }],
+        dataset: { label: 'Revenue', borderColor: PRIMARY, backgroundColor: 'transparent' },
+        legend: true, chartOpts: {}
+      }
+    );
+
+    // Orders comparison
+    const thisM = d.this_month.count;
+    const lastM = d.last_month.count;
+    makeChart('ordersCompChart', 'bar',
+      ['This Month', 'Last Month'], [thisM, lastM],
+      { single: true }
+    );
+
+    // Category pie
+    const catKeys = Object.keys(d.category_sales);
+    makeChart('categoryChart', 'pie', catKeys, catKeys.map(k => d.category_sales[k]));
+
+    // Payment pie
+    makeChart('paymentChart', 'doughnut',
+      ['UPI', 'Cash on Delivery'],
+      [d.payment_breakdown.upi, d.payment_breakdown.cod]
+    );
+
+    // Status doughnut
+    const statusKeys = Object.keys(d.status_breakdown);
+    makeChart('statusChart', 'doughnut', statusKeys, statusKeys.map(k => d.status_breakdown[k]));
+
+    // Top products
+    const topProds = d.top_products || [];
+    makeChart('topSoldChart', 'bar', topProds.map(p => p[0]), topProds.map(p => p[1]), { single: true });
+
+    // Top viewed
+    const topViewed = d.top_viewed || [];
+    makeChart('topViewedChart', 'bar', topViewed.map(p => p[0]), topViewed.map(p => p[1]), { single: true });
+
+    // Peak hours
+    const hours = Array.from({length:24},(_,i)=>i);
+    makeChart('hoursChart', 'bar', hours.map(h=>`${h}:00`), hours.map(h => d.peak_hours[h]||0), { single: true });
+
+    // Ratings
+    makeChart('ratingsChart', 'bar',
+      ['1⭐','2⭐','3⭐','4⭐','5⭐'],
+      [1,2,3,4,5].map(r => d.rating_breakdown[r]||0),
+      { single: true }
+    );
+
+    // Orders analytics
+    const cancelled = d.status_breakdown['cancelled'] || 0;
+    document.getElementById("orders-stats").innerHTML = `
+      <div class="stat-card red"><div class="stat-label">Cancellation Rate</div><div class="stat-value">${d.cancellation_rate}%</div></div>
+      <div class="stat-card amber"><div class="stat-label">Refunds Pending</div><div class="stat-value">${d.refund_pending_count}</div></div>
+      <div class="stat-card red"><div class="stat-label">Refund Amount Pending</div><div class="stat-value">${formatPrice(d.refund_pending_amount)}</div></div>
+      <div class="stat-card"><div class="stat-label">Cancelled Orders</div><div class="stat-value">${cancelled}</div></div>
+    `;
+
+    // Customer analytics
+    document.getElementById("customer-stats").innerHTML = `
+      <div class="stat-card"><div class="stat-label">Total Unique Customers</div><div class="stat-value">${d.all_time.unique_buyers}</div></div>
+      <div class="stat-card green"><div class="stat-label">New Customers (Month)</div><div class="stat-value">${d.this_month.count}</div></div>
+    `;
+
+    // Top cities
+    document.getElementById("cities-list").innerHTML = (d.top_cities||[]).map(([city, count]) =>
+      `<div style="background:#F3F0FF;border-radius:999px;padding:6px 16px;font-size:0.9rem"><strong>${city}</strong> — ${count} orders</div>`
+    ).join("");
+
+    // Shopkeeper analytics
+    const totalOwed = d.total_owed_to_shopkeepers || 0;
+    document.getElementById("sk-summary-stats").innerHTML = `
+      <div class="stat-card"><div class="stat-label">Total Shopkeepers</div><div class="stat-value">${(d.shopkeepers||[]).length}</div></div>
+      <div class="stat-card red"><div class="stat-label">Total Owed to Shopkeepers</div><div class="stat-value">${formatPrice(totalOwed)}</div></div>
+    `;
+    document.getElementById("sk-table-body").innerHTML = (d.shopkeepers||[]).map(s => `
+      <tr>
+        <td><strong style="color:var(--primary)">${s.code}</strong></td>
+        <td>${s.shop_name}</td>
+        <td>${s.total_sold}</td>
+        <td>${formatPrice(s.revenue)}</td>
+        <td style="color:var(--success);font-weight:700">+${formatPrice(s.profit)}</td>
+        <td style="color:var(--danger);font-weight:700">${formatPrice(s.amount_owed)}</td>
+      </tr>
+    `).join("");
+
+    // Financial summary
+    document.getElementById("financial-stats").innerHTML = `
+      <div class="stat-card"><div class="stat-label">Total Revenue</div><div class="stat-value">${formatPrice(d.all_time.revenue)}</div></div>
+      <div class="stat-card red"><div class="stat-label">Total Shopkeeper Cost</div><div class="stat-value">${formatPrice(totalOwed)}</div></div>
+      <div class="stat-card green"><div class="stat-label">Total Profit</div><div class="stat-value">${formatPrice(d.all_time.profit)}</div></div>
+      <div class="stat-card amber"><div class="stat-label">This Month Profit</div><div class="stat-value">${formatPrice(d.this_month.profit)}</div></div>
+      <div class="stat-card"><div class="stat-label">Last Month Profit</div><div class="stat-value">${formatPrice(d.last_month.profit)}</div></div>
+      <div class="stat-card green"><div class="stat-label">Profit Growth</div><div class="stat-value">${
+        d.last_month.profit > 0
+          ? (((d.this_month.profit - d.last_month.profit) / d.last_month.profit) * 100).toFixed(1) + '%'
+          : 'N/A'
+      }</div></div>
+    `;
+
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("analytics-content").style.display = "block";
+  } catch(e) {
+    document.getElementById("loading").innerHTML = `<div style="color:var(--danger)">Failed to load analytics: ${e.message}</div>`;
+  }
+}
+
+async function logout() {
+  await apiFetch("/api/auth/logout", { method: "POST" });
+  window.location = "/admin/login";
+}
+
+loadAnalytics();
+</script>
+</body>
+</html>

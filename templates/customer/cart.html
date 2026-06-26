@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Cart — Clothyk</title>
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <style>
+    .cart-layout { display: grid; grid-template-columns: 1fr 340px; gap: 32px; align-items: start; }
+    .cart-item { display: flex; gap: 16px; padding: 16px; background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 12px; }
+    .cart-item img { width: 90px; height: 110px; object-fit: cover; border-radius: 10px; flex-shrink: 0; }
+    .cart-item-info { flex: 1; }
+    .cart-item-name { font-weight: 700; margin-bottom: 4px; }
+    .cart-item-meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 8px; }
+    .cart-item-price { color: var(--primary); font-weight: 700; font-size: 1.1rem; }
+    .qty-control { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .qty-btn { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--primary); background: none; color: var(--primary); font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+    .qty-btn:hover { background: var(--primary); color: #fff; }
+    .order-summary { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; position: sticky; top: 80px; }
+    .summary-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    .summary-total { display: flex; justify-content: space-between; padding: 12px 0; font-weight: 800; font-size: 1.1rem; color: var(--primary); }
+    .empty-cart { text-align: center; padding: 80px 24px; }
+    @media (max-width: 900px) { .cart-layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="/" class="nav-logo">👗 Clothyk</a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/products">Shop</a>
+      <a href="/wishlist">Wishlist</a>
+    </div>
+    <div class="nav-actions">
+      <button class="nav-icon-btn" onclick="window.location='/wishlist'">❤️ <span id="wishlist-badge" class="nav-badge" style="display:none">0</span></button>
+      <button class="nav-icon-btn" onclick="window.location='/cart'">🛍️ <span id="cart-badge" class="nav-badge" style="display:none">0</span></button>
+    </div>
+  </nav>
+
+  <div class="container" style="padding-top:32px;padding-bottom:48px">
+    <h1 style="font-size:1.8rem;font-weight:800;margin-bottom:8px">🛍️ Your Cart</h1>
+
+    <div id="empty-cart" class="empty-cart" style="display:none">
+      <div style="font-size:4rem;margin-bottom:16px">🛒</div>
+      <h2 style="margin-bottom:8px">Your cart is empty</h2>
+      <p style="color:var(--muted);margin-bottom:24px">Looks like you haven't added any items yet</p>
+      <a href="/products" class="btn btn-primary btn-lg">Continue Shopping</a>
+    </div>
+
+    <div id="cart-content" class="cart-layout">
+      <div>
+        <div id="cart-items"></div>
+        <a href="/products" style="color:var(--primary);font-size:0.9rem;font-weight:600">← Continue Shopping</a>
+      </div>
+      <div class="order-summary">
+        <h3 style="margin-bottom:16px;font-weight:800">Order Summary</h3>
+        <div id="summary-rows"></div>
+        <div class="summary-total">
+          <span>Total</span>
+          <span id="total-price"></span>
+        </div>
+        <a href="/checkout" class="btn btn-primary btn-lg btn-block" style="margin-top:16px">
+          Proceed to Checkout →
+        </a>
+        <p style="color:var(--muted);font-size:0.8rem;text-align:center;margin-top:12px">
+          Secure checkout via WhatsApp · UPI or COD
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+  <script src="/static/js/shared.js"></script>
+  <script>
+    function renderCart() {
+      const items = Cart.get();
+      const cartContent = document.getElementById("cart-content");
+      const emptyCart = document.getElementById("empty-cart");
+
+      if (!items.length) {
+        cartContent.style.display = "none";
+        emptyCart.style.display = "block";
+        return;
+      }
+      cartContent.style.display = "grid";
+      emptyCart.style.display = "none";
+
+      document.getElementById("cart-items").innerHTML = items.map((item, idx) => `
+        <div class="cart-item">
+          <img src="${item.image || '/static/images/placeholder.svg'}" alt="${item.name}">
+          <div class="cart-item-info">
+            <div class="cart-item-name">${item.name}</div>
+            <div class="cart-item-meta">Size: ${item.size} · Color: ${item.color}</div>
+            <div class="cart-item-price">${formatPrice(item.price)}</div>
+            <div class="qty-control">
+              <button class="qty-btn" onclick="changeQty(${idx}, -1)">−</button>
+              <span style="font-weight:700">${item.qty || 1}</span>
+              <button class="qty-btn" onclick="changeQty(${idx}, 1)">+</button>
+              <button onclick="removeItem('${item.id}','${item.size}','${item.color}')" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--danger);font-size:0.85rem;font-weight:600">Remove</button>
+            </div>
+          </div>
+        </div>
+      `).join("");
+
+      const summaryRows = items.map(i => `
+        <div class="summary-row">
+          <span>${i.name} × ${i.qty || 1}</span>
+          <span>${formatPrice(i.price * (i.qty || 1))}</span>
+        </div>
+      `).join("");
+      document.getElementById("summary-rows").innerHTML = summaryRows;
+      document.getElementById("total-price").textContent = formatPrice(Cart.total());
+    }
+
+    function changeQty(idx, delta) {
+      const items = Cart.get();
+      items[idx].qty = Math.max(1, (items[idx].qty || 1) + delta);
+      Cart.save(items);
+      renderCart();
+    }
+
+    function removeItem(id, size, color) {
+      Cart.remove(id, size, color);
+      renderCart();
+      showToast("Item removed", "warning");
+    }
+
+    renderCart();
+  </script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shop All Dresses — Clothyk</title>
+  <meta name="description" content="Browse our full collection of trendy dresses. Filter by category, sort by price.">
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <style>
+    .filters-bar {
+      display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+      background: #fff; padding: 16px; border-radius: var(--radius);
+      box-shadow: var(--shadow); margin-bottom: 24px;
+    }
+    .filters-bar input { flex: 1; min-width: 180px; }
+    .filters-bar select { min-width: 140px; }
+    .results-info { color: var(--muted); font-size: 0.9rem; margin-bottom: 12px; }
+    .empty-state { text-align: center; padding: 64px 24px; color: var(--muted); grid-column: 1/-1; }
+    .empty-state .emoji { font-size: 3rem; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="/" class="nav-logo">👗 Clothyk</a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/products">Shop</a>
+      <a href="/wishlist">Wishlist</a>
+    </div>
+    <div class="nav-actions">
+      <button class="nav-icon-btn" onclick="window.location='/wishlist'">
+        ❤️ <span id="wishlist-badge" class="nav-badge" style="display:none">0</span>
+      </button>
+      <button class="nav-icon-btn" onclick="window.location='/cart'">
+        🛍️ <span id="cart-badge" class="nav-badge" style="display:none">0</span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="container" style="padding-top:32px">
+    <h1 style="font-size:1.8rem;font-weight:800;margin-bottom:8px">👗 Shop All Dresses</h1>
+    <p style="color:var(--muted);margin-bottom:24px">Handpicked styles from local boutiques</p>
+
+    <div class="filters-bar">
+      <input class="form-control" type="search" id="search" placeholder="🔍 Search dresses...">
+      <select class="form-control" id="category">
+        <option value="">All Categories</option>
+      </select>
+      <select class="form-control" id="sort">
+        <option value="">Latest First</option>
+        <option value="price_asc">Price: Low to High</option>
+        <option value="price_desc">Price: High to Low</option>
+      </select>
+      <button class="btn btn-primary" onclick="loadProducts()">Search</button>
+    </div>
+
+    <div class="results-info" id="results-info"></div>
+    <div class="product-grid" id="products-grid"></div>
+  </div>
+
+  <footer>
+    <p style="opacity:.7">© 2024 Clothyk. Trendy dresses delivered across India 🇮🇳</p>
+  </footer>
+
+  <div id="toast-container"></div>
+  <script src="/static/js/shared.js"></script>
+  <script>
+    let debounceTimer;
+
+    async function loadCategories() {
+      try {
+        const cats = await apiFetch("/api/products/categories");
+        const sel = document.getElementById("category");
+        cats.forEach(c => {
+          const opt = document.createElement("option");
+          opt.value = c; opt.textContent = c;
+          sel.appendChild(opt);
+        });
+        // Apply URL param
+        const urlCat = new URLSearchParams(location.search).get("category");
+        if (urlCat) { sel.value = urlCat; loadProducts(); }
+      } catch(e) {}
+    }
+
+    async function loadProducts() {
+      const grid = document.getElementById("products-grid");
+      skeletonCards(grid, 8);
+
+      const search = document.getElementById("search").value;
+      const category = document.getElementById("category").value;
+      const sort = document.getElementById("sort").value;
+
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      if (category) params.set("category", category);
+      if (sort) params.set("sort", sort);
+
+      try {
+        const products = await apiFetch(`/api/products/?${params}`);
+        document.getElementById("results-info").textContent = `${products.length} product${products.length !== 1 ? "s" : ""} found`;
+
+        if (!products.length) {
+          grid.innerHTML = `
+            <div class="empty-state">
+              <div class="emoji">🔍</div>
+              <h3>No products found</h3>
+              <p>Try different search terms or clear filters</p>
+            </div>`;
+          return;
+        }
+        grid.innerHTML = products.map(p => renderProductCard(p)).join("");
+      } catch(e) {
+        grid.innerHTML = `<div class="empty-state"><div class="emoji">⚠️</div><p>Failed to load products. Try again.</p></div>`;
+      }
+    }
+
+    document.getElementById("search").addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(loadProducts, 400);
+    });
+    document.getElementById("category").addEventListener("change", loadProducts);
+    document.getElementById("sort").addEventListener("change", loadProducts);
+
+    loadCategories();
+    loadProducts();
+  </script>
+</body>
+</html>
