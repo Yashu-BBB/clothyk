@@ -84,15 +84,6 @@ async def create_order(order: OrderRequest, request: Request):
     except Exception as e:
         logger.warning(f"Stock update failed for {order.product_id}: {e}")
 
-    # Send WhatsApp order confirmation + payment choice
-    wa_msg = msg_order_received(
-        order.customer_name,
-        prod["name"],
-        order.size,
-        order.color,
-        prod["our_price"]
-    )
-    send_text(order.customer_phone, wa_msg)
 
     return {
         "success": True,
