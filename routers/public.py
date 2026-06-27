@@ -13,7 +13,7 @@ def render(template: str, request: Request, **ctx):
 
 # ─── Customer Pages ───────────────────────────────────────────────────────
 
-@router.get("/", response_class=HTMLResponse)
+@router.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def home(request: Request):
     return render("customer/home.html", request)
 
