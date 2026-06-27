@@ -105,7 +105,7 @@
             🤍
           </button>
         </div>
-        <a href="/checkout" class="btn btn-success btn-lg btn-block">⚡ Buy Now</a>
+        <button class="btn btn-success btn-lg btn-block" onclick="buyNow()">⚡ Buy Now</button>
 
         <!-- Info Cards -->
         <div style="margin-top:24px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -210,7 +210,15 @@
       if (product.stock < 1) { showToast("Out of stock", "error"); return; }
       Cart.add(product, selectedSize, selectedColor);
     }
-
+    
+    function buyNow() {
+      if (!selectedSize) { showToast("Please select a size", "error"); return; }
+      if (!selectedColor) { showToast("Please select a color", "error"); return; }
+      if (product.stock < 1) { showToast("Out of stock", "error"); return; }
+      Cart.add(product, selectedSize, selectedColor);
+      window.location = "/checkout";
+    }
+    
     function toggleWishlistProduct() {
       if (!product) return;
       Wishlist.toggle(product);

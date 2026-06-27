@@ -175,10 +175,9 @@
         Cart.clear();
 
         // Open WhatsApp with pre-filled message
-        const phone = "91" + orderData.customer_phone;
+        const adminPhone = result.admin_phone;
         const waMsg = encodeURIComponent(result.whatsapp_message);
-        const waUrl = `https://wa.me/${phone}?text=${waMsg}`;
-
+        const waUrl = `https://wa.me/${adminPhone}?text=${waMsg}`;
         showToast("Order placed! Opening WhatsApp... 🎉", "success");
         setTimeout(() => { window.open(waUrl, "_blank"); }, 1000);
         setTimeout(() => { window.location = "/"; }, 2500);

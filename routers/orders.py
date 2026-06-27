@@ -92,11 +92,12 @@ async def create_order(order: OrderRequest, request: Request):
         order.color,
         prod["our_price"]
     )
-    send_text(WA_NUMBER, wa_msg)
+    send_text(order.customer_phone, wa_msg)
 
     return {
         "success": True,
         "order_id": new_order["id"],
+        "admin_phone": WA_NUMBER,
         "whatsapp_message": (
             f"🛍️ New Order!\n\n"
             f"Product: {prod['name']}\n"

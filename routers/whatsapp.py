@@ -58,9 +58,21 @@ async def set_agent_state(order_id: str, state: dict):
 async def whatsapp_webhook(request: Request):
     """UltraMsg sends POST webhooks for incoming messages."""
     try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid request")
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            body = await request.json()
+        else:
+            form = await request.form()
+            import json as _json
+            data_raw = form.get("data", "{}")
+            try:
+                body = {"data": _json.loads(data_raw)}
+            except Exception:
+                body = {"data": {}}
+        logger.info(f"Webhook received: {str(body)[:200]}")
+    except Exception as e:
+        logger.error(f"Webhook parse error: {e}")
+        return {"status": "ok"}
 
     # UltraMsg webhook structure
     msg_data = body.get("data", {})
