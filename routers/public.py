@@ -58,6 +58,12 @@ async def admin_products(request: Request):
         return RedirectResponse("/admin/login")
     return render("admin/products.html", request)
 
+@router.get("/admin/categories", response_class=HTMLResponse)
+async def admin_categories(request: Request):
+    if not get_admin_from_request(request):
+        return RedirectResponse("/admin/login")
+    return render("admin/categories.html", request)
+
 @router.get("/admin/shopkeepers", response_class=HTMLResponse)
 async def admin_shopkeepers(request: Request):
     if not get_admin_from_request(request):

@@ -125,3 +125,54 @@ CREATE INDEX IF NOT EXISTS idx_visitors_created_at ON visitors(created_at);
 INSERT INTO admins (username, password)
 VALUES ('admin', '$2b$12$KIX0.GGqK4R2WPNiPdFJHO0sMQ8WnmEjRaJ.8jN5tPSaP.aA8bHRS')
 ON CONFLICT (username) DO NOTHING;
+-- ═══════════════════════════════════════════════════
+-- CLOTHYK SCHEMA UPDATE — Categories + Gender
+-- Run in Supabase SQL Editor
+-- ═══════════════════════════════════════════════════
+
+-- Add gender column to products
+ALTER TABLE products ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT 'Girls' CHECK (gender IN ('Boys', 'Girls'));
+
+-- Create categories table
+CREATE TABLE IF NOT EXISTS categories (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    icon TEXT NOT NULL DEFAULT '🏷️',
+    gender TEXT NOT NULL CHECK (gender IN ('Boys', 'Girls')),
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+
+-- Public can read categories
+CREATE POLICY "public_read_categories" ON categories FOR SELECT USING (true);
+
+-- Insert default categories
+INSERT INTO categories (name, icon, gender, sort_order) VALUES
+-- Girls
+('Kurti', '👘', 'Girls', 1),
+('Saree', '🥻', 'Girls', 2),
+('Lehenga', '✨', 'Girls', 3),
+('Anarkali', '🌸', 'Girls', 4),
+('Dress', '👗', 'Girls', 5),
+('Top', '👚', 'Girls', 6),
+('Maxi', '💃', 'Girls', 7),
+('Co-ord Set', '🎀', 'Girls', 8),
+('Gown', '👸', 'Girls', 9),
+('Ethnic Wear', '🪷', 'Girls', 10),
+-- Boys
+('T-Shirt', '👕', 'Boys', 1),
+('Shirt', '👔', 'Boys', 2),
+('Jeans', '👖', 'Boys', 3),
+('Track Pants', '🏃', 'Boys', 4),
+('Shorts', '🩳', 'Boys', 5),
+('Ethnic Kurta', '🧥', 'Boys', 6),
+('Hoodie', '🧣', 'Boys', 7),
+('Formal Wear', '💼', 'Boys', 8)
+ON CONFLICT (name) DO NOTHING;
+
+-- Index for fast gender filtering
+CREATE INDEX IF NOT EXISTS idx_products_gender ON products(gender);
+CREATE INDEX IF NOT EXISTS idx_categories_gender ON categories(gender);

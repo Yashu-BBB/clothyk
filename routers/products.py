@@ -12,7 +12,7 @@ from utils.auth_utils import require_admin
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-SAFE_FIELDS = "id,name,description,our_price,sizes,colors,image,category,featured,stock,shopkeeper_code,view_count,created_at"
+SAFE_FIELDS = "id,name,description,our_price,sizes,colors,image,category,gender,featured,stock,shopkeeper_code,view_count,created_at"
 
 
 # ─── PUBLIC ENDPOINTS ─────────────────────────────────────────────────────
@@ -22,15 +22,18 @@ async def list_products(
     category: Optional[str] = None,
     search: Optional[str] = None,
     sort: Optional[str] = None,
-    featured: Optional[bool] = None
+    featured: Optional[bool] = None,
+    gender: Optional[str] = None
 ):
-    cache_key = f"products:list:{category}:{search}:{sort}:{featured}"
+    cache_key = f"products:list:{category}:{search}:{sort}:{featured}:{gender}"
     cached = await cache_get(cache_key)
     if cached:
         return cached
 
     try:
         query = supabase_admin.table("products").select(SAFE_FIELDS).gt("stock", 0)
+        if gender:
+            query = query.eq("gender", gender)
         if category:
             query = query.eq("category", category)
         if featured is not None:

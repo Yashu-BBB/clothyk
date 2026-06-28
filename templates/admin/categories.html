@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Categories — Clothyk Admin</title>
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <link rel="stylesheet" href="/static/css/admin.css">
+  <style>
+    .gender-filter { display:flex; gap:8px; margin-bottom:20px; }
+    .gender-filter button { padding:8px 20px; border-radius:999px; border:2px solid var(--border); background:#fff; font-weight:600; cursor:pointer; transition:all .2s; }
+    .gender-filter button.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+    .cat-icon-preview { font-size:1.5rem; margin-right:8px; }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  {% set active = 'categories' %}
+  {% include 'admin/_sidebar.html' %}
+
+  <div class="admin-main">
+    <div class="admin-topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+        <span class="admin-topbar-title">Categories</span>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openModal()">+ Add Category</button>
+    </div>
+
+    <div class="admin-content">
+      <div class="gender-filter">
+        <button class="active" id="filter-all" onclick="filterGender('all', this)">All</button>
+        <button id="filter-Girls" onclick="filterGender('Girls', this)">👗 Girls</button>
+        <button id="filter-Boys" onclick="filterGender('Boys', this)">👕 Boys</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Icon</th><th>Name</th><th>Gender</th><th>Sort Order</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="cat-body">
+            <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="cat-modal">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-title">Add Category</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div id="modal-alert"></div>
+    <div class="form-group">
+      <label class="form-label">Category Name *</label>
+      <input class="form-control" id="cat-name" placeholder="e.g. Kurti, T-Shirt">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Icon (Emoji) *</label>
+      <input class="form-control" id="cat-icon" placeholder="e.g. 👗 👕 🥻" maxlength="4">
+      <div style="margin-top:8px;font-size:0.85rem;color:var(--muted)">
+        Common: 👗 👘 🥻 ✨ 🌸 👚 💃 👸 🪷 👕 👔 👖 🩳 🧥 🧣
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Gender *</label>
+      <select class="form-control" id="cat-gender">
+        <option value="Girls">👗 Girls</option>
+        <option value="Boys">👕 Boys</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Sort Order</label>
+      <input class="form-control" id="cat-sort" type="number" value="0" min="0">
+      <div style="font-size:0.8rem;color:var(--muted);margin-top:4px">Lower number = shown first</div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:8px">
+      <button class="btn btn-primary btn-lg" style="flex:1" id="submit-btn" onclick="saveCategory()">Save</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="/static/js/shared.js"></script>
+<script>
+let editingId = null;
+let allCats = [];
+let currentFilter = 'all';
+
+async function loadCategories() {
+  try {
+    allCats = await apiFetch("/api/categories/admin/all");
+    renderTable();
+  } catch(e) {
+    showToast("Failed to load categories", "error");
+  }
+}
+
+function filterGender(gender, btn) {
+  currentFilter = gender;
+  document.querySelectorAll('.gender-filter button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+
+function renderTable() {
+  const body = document.getElementById("cat-body");
+  const filtered = currentFilter === 'all' ? allCats : allCats.filter(c => c.gender === currentFilter);
+
+  if (!filtered.length) {
+    body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">No categories yet</td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map(c => `
+    <tr>
+      <td style="font-size:1.5rem">${c.icon}</td>
+      <td><strong>${c.name}</strong></td>
+      <td><span class="badge badge-${c.gender === 'Girls' ? 'primary' : 'warning'}">${c.gender}</span></td>
+      <td>${c.sort_order}</td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick='openEdit(${JSON.stringify(c)})'>Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCat(${c.id},'${c.name}')">Delete</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openModal() {
+  editingId = null;
+  document.getElementById('modal-title').textContent = 'Add Category';
+  document.getElementById('cat-name').value = '';
+  document.getElementById('cat-icon').value = '';
+  document.getElementById('cat-gender').value = 'Girls';
+  document.getElementById('cat-sort').value = '0';
+  document.getElementById('modal-alert').innerHTML = '';
+  document.getElementById('cat-modal').classList.add('open');
+}
+
+function openEdit(cat) {
+  editingId = cat.id;
+  document.getElementById('modal-title').textContent = 'Edit Category';
+  document.getElementById('cat-name').value = cat.name;
+  document.getElementById('cat-icon').value = cat.icon;
+  document.getElementById('cat-gender').value = cat.gender;
+  document.getElementById('cat-sort').value = cat.sort_order;
+  document.getElementById('modal-alert').innerHTML = '';
+  document.getElementById('cat-modal').classList.add('open');
+}
+
+function closeModal() { document.getElementById('cat-modal').classList.remove('open'); }
+
+async function saveCategory() {
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  const data = {
+    name: document.getElementById('cat-name').value.trim(),
+    icon: document.getElementById('cat-icon').value.trim(),
+    gender: document.getElementById('cat-gender').value,
+    sort_order: parseInt(document.getElementById('cat-sort').value) || 0
+  };
+
+  if (!data.name || !data.icon) {
+    document.getElementById('modal-alert').innerHTML = '<div class="alert alert-danger">Name and icon required</div>';
+    btn.disabled = false; btn.textContent = 'Save';
+    return;
+  }
+
+  try {
+    const url = editingId ? `/api/categories/admin/${editingId}` : '/api/categories/admin/add';
+    const method = editingId ? 'PUT' : 'POST';
+    await apiFetch(url, { method, body: JSON.stringify(data) });
+    showToast(editingId ? 'Category updated! ✅' : 'Category added! ✅');
+    closeModal();
+    loadCategories();
+  } catch(e) {
+    document.getElementById('modal-alert').innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+  }
+  btn.disabled = false; btn.textContent = 'Save';
+}
+
+async function deleteCat(id, name) {
+  if (!confirm(`Delete category "${name}"?`)) return;
+  try {
+    await apiFetch(`/api/categories/admin/${id}`, { method: 'DELETE' });
+    showToast('Deleted', 'warning');
+    loadCategories();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function logout() {
+  await apiFetch("/api/auth/logout", { method: "POST" });
+  window.location = "/admin/login";
+}
+
+loadCategories();
+</script>
+</body>
+</html>
