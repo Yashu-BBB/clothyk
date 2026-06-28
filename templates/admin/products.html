@@ -9,6 +9,34 @@
   <style>
     .product-thumb { width: 48px; height: 60px; object-fit: cover; border-radius: 6px; }
     .img-preview { width: 100%; max-height: 200px; object-fit: cover; border-radius: 10px; margin-top: 8px; display: none; }
+
+    /* ─── Size Selector ─────────────────────────────────── */
+    .size-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .size-chip {
+      padding: 6px 14px; border-radius: 8px; border: 2px solid var(--border);
+      cursor: pointer; font-weight: 600; font-size: 0.85rem;
+      background: #fff; transition: all .15s; user-select: none;
+    }
+    .size-chip.selected { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .size-chip:hover:not(.selected) { border-color: var(--primary); color: var(--primary); }
+    .size-type-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+    .size-type-tab {
+      padding: 5px 14px; border-radius: 999px; border: 1.5px solid var(--border);
+      font-size: 0.8rem; font-weight: 600; cursor: pointer; background: #fff;
+      transition: all .15s;
+    }
+    .size-type-tab.active { background: var(--primary-light); color: #fff; border-color: var(--primary-light); }
+
+    /* ─── Gender Toggle ─────────────────────────────────── */
+    .gender-toggle-field { display: flex; gap: 12px; margin-top: 6px; }
+    .gender-opt {
+      flex: 1; padding: 12px; border-radius: 10px; border: 2px solid var(--border);
+      cursor: pointer; text-align: center; font-weight: 700; transition: all .2s;
+      background: #fff;
+    }
+    .gender-opt.selected-girls { border-color: #EC4899; background: #FDF2F8; color: #BE185D; }
+    .gender-opt.selected-boys { border-color: #3B82F6; background: #EFF6FF; color: #1D4ED8; }
+    .gender-opt:hover { border-color: var(--primary); }
   </style>
 </head>
 <body>
@@ -30,12 +58,12 @@
         <table>
           <thead>
             <tr>
-              <th>Image</th><th>Name</th><th>Our Price</th><th>SK Price</th>
-              <th>Profit/unit</th><th>Stock</th><th>Code</th><th>Featured</th><th>Actions</th>
+              <th>Image</th><th>Name</th><th>Gender</th><th>Category</th><th>Our Price</th><th>SK Price</th>
+              <th>Profit</th><th>Stock</th><th>Code</th><th>Actions</th>
             </tr>
           </thead>
           <tbody id="products-body">
-            <tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr>
+            <tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -45,27 +73,50 @@
 
 <!-- Add/Edit Modal -->
 <div class="modal-overlay" id="product-modal">
-  <div class="modal" style="max-width:640px">
+  <div class="modal" style="max-width:660px">
     <div class="modal-header">
       <h3 class="modal-title" id="modal-title">Add Product</h3>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div id="modal-alert"></div>
+
     <form id="product-form" enctype="multipart/form-data">
+
+      <!-- Gender -->
+      <div class="form-group">
+        <label class="form-label">Gender *</label>
+        <div class="gender-toggle-field">
+          <div class="gender-opt" id="opt-Girls" onclick="selectGender('Girls')">
+            👗 Girls
+          </div>
+          <div class="gender-opt" id="opt-Boys" onclick="selectGender('Boys')">
+            👕 Boys
+          </div>
+        </div>
+        <input type="hidden" name="gender" id="gender-val" value="Girls">
+      </div>
+
+      <!-- Name + Category -->
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Product Name *</label>
-          <input class="form-control" name="name" required placeholder="e.g. Floral Summer Dress">
+          <input class="form-control" name="name" required placeholder="e.g. Floral Summer Kurti">
         </div>
         <div class="form-group">
-          <label class="form-label">Category</label>
-          <input class="form-control" name="category" placeholder="e.g. Kurti, Dress, Saree">
+          <label class="form-label">Category *</label>
+          <select class="form-control" name="category" id="category-select" required>
+            <option value="">Select gender first...</option>
+          </select>
         </div>
       </div>
+
+      <!-- Description -->
       <div class="form-group">
         <label class="form-label">Description</label>
-        <textarea class="form-control" name="description" rows="3" placeholder="Describe the product..."></textarea>
+        <textarea class="form-control" name="description" rows="2" placeholder="Describe the product..."></textarea>
       </div>
+
+      <!-- Prices -->
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Our Price (₹) *</label>
@@ -76,16 +127,42 @@
           <input class="form-control" name="shopkeeper_price" type="number" min="1" step="0.01" required placeholder="e.g. 850">
         </div>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Sizes (comma separated)</label>
-          <input class="form-control" name="sizes_raw" placeholder="S, M, L, XL, XXL">
+
+      <!-- Sizes -->
+      <div class="form-group">
+        <label class="form-label">Sizes *</label>
+
+        <!-- Size type tabs -->
+        <div class="size-type-tabs">
+          <div class="size-type-tab active" onclick="loadSizePreset('standard', this)">Standard (S-XXL)</div>
+          <div class="size-type-tab" onclick="loadSizePreset('bottom', this)">Bottom Wear (28-42)</div>
+          <div class="size-type-tab" onclick="loadSizePreset('footwear', this)">Footwear (6-11)</div>
+          <div class="size-type-tab" onclick="loadSizePreset('freesize', this)">Free Size</div>
+          <div class="size-type-tab" onclick="loadSizePreset('custom', this)">Custom</div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Colors (comma separated)</label>
-          <input class="form-control" name="colors_raw" placeholder="Red, Black, White">
+
+        <!-- Size chips -->
+        <div class="size-grid" id="size-chips"></div>
+
+        <!-- Custom size input -->
+        <div id="custom-size-wrap" style="display:none;margin-top:10px">
+          <input class="form-control" id="custom-size-input" placeholder="Type size and press Enter (e.g. 36, 38, 40)">
         </div>
+
+        <!-- Selected sizes display -->
+        <div style="margin-top:8px;font-size:0.82rem;color:var(--muted)">
+          Selected: <span id="selected-sizes-display" style="color:var(--primary);font-weight:600">None</span>
+        </div>
+        <input type="hidden" name="sizes_raw" id="sizes-hidden">
       </div>
+
+      <!-- Colors -->
+      <div class="form-group">
+        <label class="form-label">Colors (comma separated)</label>
+        <input class="form-control" name="colors_raw" placeholder="e.g. Red, Black, White, Navy Blue">
+      </div>
+
+      <!-- Stock + Shopkeeper -->
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Stock</label>
@@ -98,16 +175,21 @@
           </select>
         </div>
       </div>
+
+      <!-- Featured -->
       <div class="form-group">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="featured" id="featured-cb" style="width:18px;height:18px"> Featured product
         </label>
       </div>
+
+      <!-- Image -->
       <div class="form-group">
         <label class="form-label">Product Image</label>
         <input class="form-control" type="file" name="image" accept="image/*" onchange="previewImg(this)">
         <img class="img-preview" id="img-preview">
       </div>
+
       <div style="display:flex;gap:12px;margin-top:8px">
         <button type="submit" class="btn btn-primary btn-lg" style="flex:1" id="submit-btn">Save Product</button>
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
@@ -120,25 +202,144 @@
 <script src="/static/js/shared.js"></script>
 <script>
 let editingId = null;
+let selectedSizes = [];
 
+// ─── SIZE PRESETS ──────────────────────────────────────────────────────────
+const SIZE_PRESETS = {
+  standard: ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'],
+  bottom: ['26', '28', '30', '32', '34', '36', '38', '40', '42'],
+  footwear: ['6', '7', '8', '9', '10', '11'],
+  freesize: ['Free Size'],
+  custom: []
+};
+
+function loadSizePreset(type, tabEl) {
+  // Update active tab
+  document.querySelectorAll('.size-type-tab').forEach(t => t.classList.remove('active'));
+  tabEl.classList.add('active');
+
+  const customWrap = document.getElementById('custom-size-wrap');
+  customWrap.style.display = type === 'custom' ? 'block' : 'none';
+
+  selectedSizes = [];
+  renderSizeChips(type === 'custom' ? [] : SIZE_PRESETS[type]);
+
+  // Auto-select Free Size if freesize preset
+  if (type === 'freesize') {
+    selectedSizes = ['Free Size'];
+    document.querySelectorAll('.size-chip').forEach(c => c.classList.add('selected'));
+    updateSizesHidden();
+  }
+}
+
+function renderSizeChips(sizes) {
+  const grid = document.getElementById('size-chips');
+  if (!sizes.length) {
+    grid.innerHTML = '<span style="color:var(--muted);font-size:0.85rem">Type custom sizes above and press Enter</span>';
+    updateSizesHidden();
+    return;
+  }
+  grid.innerHTML = sizes.map(s => `
+    <div class="size-chip ${selectedSizes.includes(s) ? 'selected' : ''}" onclick="toggleSize('${s}', this)">${s}</div>
+  `).join('');
+  updateSizesHidden();
+}
+
+function toggleSize(size, el) {
+  const idx = selectedSizes.indexOf(size);
+  if (idx > -1) {
+    selectedSizes.splice(idx, 1);
+    el.classList.remove('selected');
+  } else {
+    selectedSizes.push(size);
+    el.classList.add('selected');
+  }
+  updateSizesHidden();
+}
+
+function updateSizesHidden() {
+  document.getElementById('sizes-hidden').value = selectedSizes.join(', ');
+  document.getElementById('selected-sizes-display').textContent = selectedSizes.length ? selectedSizes.join(', ') : 'None';
+}
+
+// Custom size input
+document.addEventListener('DOMContentLoaded', () => {
+  const customInput = document.getElementById('custom-size-input');
+  if (customInput) {
+    customInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const val = customInput.value.trim();
+        if (val && !selectedSizes.includes(val)) {
+          selectedSizes.push(val);
+          const chip = document.createElement('div');
+          chip.className = 'size-chip selected';
+          chip.textContent = val;
+          chip.onclick = () => { toggleSize(val, chip); chip.remove(); };
+          const grid = document.getElementById('size-chips');
+          if (grid.querySelector('span')) grid.innerHTML = '';
+          grid.appendChild(chip);
+          updateSizesHidden();
+        }
+        customInput.value = '';
+      }
+    });
+  }
+  // Init gender UI
+  selectGender('Girls');
+  // Init size preset
+  loadSizePreset('standard', document.querySelector('.size-type-tab'));
+});
+
+// ─── GENDER ────────────────────────────────────────────────────────────────
+function selectGender(gender) {
+  document.getElementById('gender-val').value = gender;
+  const girlsOpt = document.getElementById('opt-Girls');
+  const boysOpt = document.getElementById('opt-Boys');
+  girlsOpt.className = 'gender-opt' + (gender === 'Girls' ? ' selected-girls' : '');
+  boysOpt.className = 'gender-opt' + (gender === 'Boys' ? ' selected-boys' : '');
+  loadCategoryDropdown(gender);
+}
+
+// ─── CATEGORY DROPDOWN ─────────────────────────────────────────────────────
+async function loadCategoryDropdown(gender, currentVal = '') {
+  const sel = document.getElementById('category-select');
+  sel.innerHTML = '<option value="">Loading...</option>';
+  try {
+    const cats = await apiFetch(`/api/categories/?gender=${gender}`);
+    sel.innerHTML = '<option value="">Select category...</option>';
+    cats.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.name;
+      opt.textContent = `${c.icon} ${c.name}`;
+      if (c.name === currentVal) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  } catch(e) {
+    sel.innerHTML = '<option value="">Failed to load</option>';
+  }
+}
+
+// ─── PRODUCTS TABLE ────────────────────────────────────────────────────────
 async function loadProducts() {
   try {
     const products = await apiFetch("/api/products/admin/all");
     const body = document.getElementById("products-body");
     if (!products.length) {
-      body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">No products yet. Add your first product!</td></tr>';
+      body.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted)">No products yet. Add your first product!</td></tr>';
       return;
     }
     body.innerHTML = products.map(p => `
       <tr>
         <td><img src="${p.image || '/static/images/placeholder.svg'}" class="product-thumb" alt="${p.name}"></td>
-        <td><strong>${p.name}</strong><br><span style="color:var(--muted);font-size:0.8rem">${p.category || ''}</span></td>
+        <td><strong>${p.name}</strong></td>
+        <td><span class="badge badge-${p.gender === 'Girls' ? 'primary' : 'warning'}">${p.gender || '—'}</span></td>
+        <td>${p.category || '—'}</td>
         <td><strong>${formatPrice(p.our_price)}</strong></td>
         <td style="color:var(--muted)">${formatPrice(p.shopkeeper_price)}</td>
         <td style="color:var(--success);font-weight:700">+${formatPrice(p.our_price - p.shopkeeper_price)}</td>
         <td><span class="badge badge-${p.stock > 2 ? 'success' : p.stock > 0 ? 'warning' : 'danger'}">${p.stock}</span></td>
         <td style="font-weight:700;color:var(--primary)">${p.shopkeeper_code || ''}</td>
-        <td>${p.featured ? '⭐' : '—'}</td>
         <td>
           <button class="btn btn-outline btn-sm" onclick='openEdit(${JSON.stringify(p)})'>Edit</button>
           <button class="btn btn-danger btn-sm" onclick="deleteProduct('${p.id}','${p.name}')">Delete</button>
@@ -150,7 +351,8 @@ async function loadProducts() {
   }
 }
 
-async function loadShopkeeperDropdown() {
+// ─── SHOPKEEPER DROPDOWN ───────────────────────────────────────────────────
+async function loadShopkeeperDropdown(currentVal = '') {
   try {
     const sks = await apiFetch("/api/shopkeepers/admin/dropdown");
     const sel = document.getElementById("sk-select");
@@ -158,38 +360,69 @@ async function loadShopkeeperDropdown() {
     sks.forEach(s => {
       const opt = document.createElement("option");
       opt.value = s.id; opt.textContent = s.label;
+      if (String(s.id) === String(currentVal)) opt.selected = true;
       sel.appendChild(opt);
     });
   } catch(e) {}
 }
 
+// ─── MODAL OPEN ────────────────────────────────────────────────────────────
 function openModal() {
   editingId = null;
+  selectedSizes = [];
   document.getElementById("modal-title").textContent = "Add Product";
   document.getElementById("product-form").reset();
   document.getElementById("img-preview").style.display = "none";
   document.getElementById("modal-alert").innerHTML = "";
-  document.getElementById("product-modal").classList.add("open");
+  selectGender('Girls');
+  loadSizePreset('standard', document.querySelector('.size-type-tab'));
   loadShopkeeperDropdown();
+  document.getElementById("product-modal").classList.add("open");
 }
 
 function openEdit(p) {
   editingId = p.id;
+  selectedSizes = Array.isArray(p.sizes) ? [...p.sizes] : JSON.parse(p.sizes || '[]');
   document.getElementById("modal-title").textContent = "Edit Product";
   document.getElementById("modal-alert").innerHTML = "";
   const form = document.getElementById("product-form");
   form.name.value = p.name;
-  form.category.value = p.category || "";
   form.description.value = p.description || "";
   form.our_price.value = p.our_price;
   form.shopkeeper_price.value = p.shopkeeper_price;
-  form.sizes_raw.value = (p.sizes || []).join(", ");
   form.colors_raw.value = (p.colors || []).join(", ");
   form.stock.value = p.stock;
   document.getElementById("featured-cb").checked = p.featured;
-  if (p.image) { document.getElementById("img-preview").src = p.image; document.getElementById("img-preview").style.display = "block"; }
+
+  // Gender
+  const gender = p.gender || 'Girls';
+  selectGender(gender);
+
+  // Category — set after dropdown loads
+  loadCategoryDropdown(gender, p.category);
+
+  // Sizes — detect preset type
+  const bottomSizes = ['26','28','30','32','34','36','38','40','42'];
+  const footwearSizes = ['6','7','8','9','10','11'];
+  let presetType = 'standard';
+  if (selectedSizes.includes('Free Size')) presetType = 'freesize';
+  else if (selectedSizes.some(s => bottomSizes.includes(s))) presetType = 'bottom';
+  else if (selectedSizes.some(s => footwearSizes.includes(s))) presetType = 'footwear';
+  else if (selectedSizes.some(s => !['XS','S','M','L','XL','XXL','3XL'].includes(s))) presetType = 'custom';
+
+  const tabs = document.querySelectorAll('.size-type-tab');
+  const presetMap = { standard: 0, bottom: 1, footwear: 2, freesize: 3, custom: 4 };
+  tabs.forEach(t => t.classList.remove('active'));
+  tabs[presetMap[presetType]]?.classList.add('active');
+  renderSizeChips(presetType === 'custom' ? selectedSizes : (presetType === 'freesize' ? ['Free Size'] : SIZE_PRESETS[presetType]));
+  document.getElementById('custom-size-wrap').style.display = presetType === 'custom' ? 'block' : 'none';
+
+  if (p.image) {
+    document.getElementById("img-preview").src = p.image;
+    document.getElementById("img-preview").style.display = "block";
+  }
+  loadShopkeeperDropdown(p.shopkeeper_id);
   document.getElementById("product-modal").classList.add("open");
-  loadShopkeeperDropdown().then(() => { if (p.shopkeeper_id) document.getElementById("sk-select").value = p.shopkeeper_id; });
 }
 
 function closeModal() {
@@ -204,19 +437,26 @@ function previewImg(input) {
   }
 }
 
+// ─── FORM SUBMIT ───────────────────────────────────────────────────────────
 document.getElementById("product-form").addEventListener("submit", async function(e) {
   e.preventDefault();
   const btn = document.getElementById("submit-btn");
   btn.disabled = true; btn.textContent = "Saving...";
 
+  if (!selectedSizes.length) {
+    document.getElementById("modal-alert").innerHTML = '<div class="alert alert-danger">Please select at least one size</div>';
+    btn.disabled = false; btn.textContent = "Save Product";
+    return;
+  }
+
   const fd = new FormData(this);
-  // Convert sizes/colors to JSON arrays
-  const sizesRaw = fd.get("sizes_raw") || "";
   const colorsRaw = fd.get("colors_raw") || "";
-  fd.delete("sizes_raw"); fd.delete("colors_raw");
-  fd.set("sizes", JSON.stringify(sizesRaw.split(",").map(s => s.trim()).filter(Boolean)));
+  fd.delete("colors_raw");
+  fd.set("sizes", JSON.stringify(selectedSizes));
   fd.set("colors", JSON.stringify(colorsRaw.split(",").map(c => c.trim()).filter(Boolean)));
   fd.set("featured", document.getElementById("featured-cb").checked);
+  fd.set("gender", document.getElementById("gender-val").value);
+  fd.delete("sizes_raw");
 
   try {
     const url = editingId ? `/api/products/admin/${editingId}` : "/api/products/admin/add";
@@ -232,6 +472,7 @@ document.getElementById("product-form").addEventListener("submit", async functio
   btn.disabled = false; btn.textContent = "Save Product";
 });
 
+// ─── DELETE ────────────────────────────────────────────────────────────────
 async function deleteProduct(id, name) {
   if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
   try {

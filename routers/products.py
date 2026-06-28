@@ -32,12 +32,12 @@ async def list_products(
 
     try:
         query = supabase_admin.table("products").select(SAFE_FIELDS).gt("stock", 0)
-        if gender:
-            query = query.eq("gender", gender)
         if category:
             query = query.eq("category", category)
         if featured is not None:
             query = query.eq("featured", featured)
+        if gender:
+            query = query.eq("gender", gender)
         if search:
             query = query.ilike("name", f"%{search}%")
         if sort == "price_asc":
@@ -92,8 +92,6 @@ async def get_product(product_id: str):
         res = supabase_admin.table("products").select(SAFE_FIELDS).eq("id", product_id).single().execute()
         if not res.data:
             raise HTTPException(status_code=404, detail="Product not found")
-
-        # Increment view_count
         supabase_admin.table("products").update({"view_count": res.data["view_count"] + 1}).eq("id", product_id).execute()
         logger.info(f"Product view incremented: {product_id}")
         return res.data
@@ -107,10 +105,13 @@ async def get_product(product_id: str):
 @router.get("/{product_id}/related")
 async def related_products(product_id: str):
     try:
-        prod = supabase_admin.table("products").select("category").eq("id", product_id).single().execute()
+        prod = supabase_admin.table("products").select("category,gender").eq("id", product_id).single().execute()
         if not prod.data:
             return []
-        res = supabase_admin.table("products").select(SAFE_FIELDS).eq("category", prod.data["category"]).neq("id", product_id).gt("stock", 0).limit(4).execute()
+        q = supabase_admin.table("products").select(SAFE_FIELDS).eq("category", prod.data["category"]).neq("id", product_id).gt("stock", 0).limit(4)
+        if prod.data.get("gender"):
+            q = q.eq("gender", prod.data["gender"])
+        res = q.execute()
         return res.data or []
     except Exception as e:
         logger.error(f"Failed related products: {e}")
@@ -121,7 +122,6 @@ async def related_products(product_id: str):
 
 @router.get("/admin/all")
 async def admin_list_products(admin=Depends(require_admin)):
-    """Admin view includes shopkeeper_price."""
     try:
         res = supabase_admin.table("products").select("*").order("created_at", desc=True).execute()
         return res.data or []
@@ -139,6 +139,7 @@ async def add_product(
     sizes: str = Form("[]"),
     colors: str = Form("[]"),
     category: str = Form(""),
+    gender: str = Form("Girls"),
     featured: bool = Form(False),
     stock: int = Form(1),
     shopkeeper_id: int = Form(...),
@@ -146,14 +147,13 @@ async def add_product(
     admin=Depends(require_admin)
 ):
     try:
-        # Get shopkeeper code
         sk = supabase_admin.table("shopkeepers").select("id").eq("id", shopkeeper_id).single().execute()
         if not sk.data:
             raise HTTPException(status_code=404, detail="Shopkeeper not found")
         shopkeeper_code = f"#{sk.data['id']:03d}"
 
         image_url = None
-        if image:
+        if image and image.filename:
             contents = await image.read()
             ext = image.filename.split(".")[-1]
             fname = f"{uuid.uuid4()}.{ext}"
@@ -168,6 +168,7 @@ async def add_product(
             "sizes": json.loads(sizes) if isinstance(sizes, str) else sizes,
             "colors": json.loads(colors) if isinstance(colors, str) else colors,
             "category": category,
+            "gender": gender,
             "featured": featured,
             "stock": stock,
             "shopkeeper_id": shopkeeper_id,
@@ -195,6 +196,7 @@ async def edit_product(
     sizes: str = Form(None),
     colors: str = Form(None),
     category: str = Form(None),
+    gender: str = Form(None),
     featured: bool = Form(None),
     stock: int = Form(None),
     shopkeeper_id: int = Form(None),
@@ -210,13 +212,14 @@ async def edit_product(
         if sizes is not None: updates["sizes"] = json.loads(sizes)
         if colors is not None: updates["colors"] = json.loads(colors)
         if category is not None: updates["category"] = category
+        if gender is not None: updates["gender"] = gender
         if featured is not None: updates["featured"] = featured
         if stock is not None: updates["stock"] = stock
         if shopkeeper_id is not None:
             updates["shopkeeper_id"] = shopkeeper_id
             updates["shopkeeper_code"] = f"#{shopkeeper_id:03d}"
 
-        if image:
+        if image and image.filename:
             contents = await image.read()
             ext = image.filename.split(".")[-1]
             fname = f"{uuid.uuid4()}.{ext}"
