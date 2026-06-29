@@ -99,11 +99,12 @@
 
     .hero-actions {
       display: flex;
-      gap: 16px;
+      gap: 12px;
       flex-wrap: wrap;
       align-items: center;
+      flex-direction: column;
+      align-items: flex-start;
     }
-
     /* SHOP GIRLS — white bg, black text */
     .hero-btn-girls {
       background: #FFFFFF;
@@ -400,6 +401,9 @@
       .gender-btn { padding: 10px 24px; font-size: 0.72rem; }
       .order-banner { padding: 20px; }
       .order-steps { display: none; }
+      .hero-btn-girls,
+      .hero-btn-boys { width: 100%; justify-content: center; padding: 14px 24px; }
+      .hero-actions { width: 100%;}
     }
   </style>
 </head>
