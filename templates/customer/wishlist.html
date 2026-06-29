@@ -5,34 +5,77 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Wishlist — Clothyk</title>
   <link rel="stylesheet" href="/static/css/shared.css">
+  <style>
+    .page-head {
+      padding: 48px 0 40px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 40px;
+    }
+  </style>
 </head>
 <body>
+
   <nav class="navbar">
-    <a href="/" class="nav-logo">👗 Clothyk</a>
+    <a href="/" class="nav-logo">Clothyk</a>
     <div class="nav-links">
       <a href="/">Home</a>
       <a href="/products">Shop</a>
       <a href="/wishlist">Wishlist</a>
     </div>
     <div class="nav-actions">
-      <button class="nav-icon-btn" onclick="window.location='/wishlist'">❤️ <span id="wishlist-badge" class="nav-badge" style="display:none">0</span></button>
-      <button class="nav-icon-btn" onclick="window.location='/cart'">🛍️ <span id="cart-badge" class="nav-badge" style="display:none">0</span></button>
+      <button class="nav-icon-btn" onclick="window.location='/wishlist'" title="Wishlist">
+        <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        <span id="wishlist-badge" class="nav-badge" style="display:none">0</span>
+      </button>
+      <button class="nav-icon-btn" onclick="window.location='/cart'" title="Cart">
+        <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        <span id="cart-badge" class="nav-badge" style="display:none">0</span>
+      </button>
+      <button class="hamburger" id="hamburger-btn" onclick="toggleMobileMenu()">
+        <svg viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" fill="none" stroke="currentColor"><line x1="3" y1="7" x2="21" y2="7"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="17" x2="21" y2="17"/></svg>
+      </button>
     </div>
   </nav>
+  <div id="mobile-nav" class="mobile-nav">
+    <a href="/">Home</a>
+    <a href="/products">Shop All</a>
+    <a href="/cart">Cart</a>
+  </div>
 
-  <div class="container" style="padding-top:32px;padding-bottom:64px">
-    <h1 style="font-size:1.8rem;font-weight:800;margin-bottom:8px">❤️ Your Wishlist</h1>
-    <p style="color:var(--muted);margin-bottom:32px">Items you've saved for later</p>
+  <div class="container">
+    <div class="page-head">
+      <div class="section-eyebrow">Saved Items</div>
+      <h1 class="section-title">Your Wishlist</h1>
+    </div>
 
-    <div id="empty-wishlist" style="display:none;text-align:center;padding:64px">
-      <div style="font-size:4rem;margin-bottom:16px">💔</div>
-      <h2>Your wishlist is empty</h2>
-      <p style="color:var(--muted);margin-bottom:24px">Save items you like and come back later</p>
-      <a href="/products" class="btn btn-primary btn-lg">Browse Products</a>
+    <!-- Empty State -->
+    <div id="empty-wishlist" style="display:none;text-align:center;padding:80px 0">
+      <div style="width:72px;height:72px;margin:0 auto 24px;opacity:0.2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--off-white)" stroke-width="1.2" width="72" height="72">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
+      </div>
+      <h2 class="section-title" style="margin-bottom:10px">Nothing saved yet</h2>
+      <p style="color:var(--muted);font-size:0.88rem;margin-bottom:32px">Browse our collection and tap the heart to save items you love</p>
+      <a href="/products" class="btn btn-primary btn-lg">Browse Collection</a>
     </div>
 
     <div id="wishlist-grid" class="product-grid"></div>
   </div>
+
+  <footer>
+    <div class="footer-inner">
+      <div>
+        <div class="footer-brand">Clothyk</div>
+        <div class="footer-links">
+          <a href="/products?gender=Girls">Girls</a>
+          <a href="/products?gender=Boys">Boys</a>
+          <a href="/cart">Cart</a>
+        </div>
+      </div>
+    </div>
+    <p class="footer-copy">© 2025 Clothyk. All rights reserved.</p>
+  </footer>
 
   <div id="toast-container"></div>
   <script src="/static/js/shared.js"></script>
@@ -52,15 +95,20 @@
 
       grid.innerHTML = items.map(item => `
         <div class="product-card">
-          <img src="${item.image || '/static/images/placeholder.svg'}" alt="${item.name}" onclick="window.location='/product/${item.id}'" style="cursor:pointer">
+          <div class="product-img-wrap">
+            <img src="${item.image || '/static/images/placeholder.svg'}" alt="${item.name}" onclick="window.location='/product/${item.id}'" style="cursor:pointer" loading="lazy">
+            <div class="product-card-overlay" style="opacity:1">
+              <button class="btn btn-primary btn-sm" onclick="moveToCart('${item.id}')">Move to Cart</button>
+            </div>
+          </div>
           <div class="product-card-body">
             <div class="product-card-name">${item.name}</div>
             <div class="product-card-price">${formatPrice(item.price)}</div>
-            <div class="product-card-code">${item.code || ''}</div>
-            <div style="display:flex;gap:8px;margin-top:10px">
-              <button class="btn btn-primary btn-sm" style="flex:1" onclick="moveToCart('${item.id}')">Move to Cart</button>
-              <button class="btn btn-danger btn-sm" onclick="removeFromWishlist('${item.id}')">✕</button>
-            </div>
+            <button onclick="removeFromWishlist('${item.id}')" class="remove-btn"
+              style="margin-top:10px;background:none;border:none;cursor:pointer;font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted-2);font-family:var(--font-body);transition:color 0.2s"
+              onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--muted-2)'">
+              Remove
+            </button>
           </div>
         </div>
       `).join("");
@@ -71,10 +119,10 @@
         const product = await apiFetch(`/api/products/${id}`);
         const sizes = Array.isArray(product.sizes) ? product.sizes : JSON.parse(product.sizes || "[]");
         const colors = Array.isArray(product.colors) ? product.colors : JSON.parse(product.colors || "[]");
-        Cart.add(product, sizes[0] || "Free Size", colors[0] || "Default");
-        showToast("Moved to cart! 🛍️");
+        Cart.add(product, sizes[0] || "One Size", colors[0] || "Default");
+        showToast("Moved to cart");
       } catch(e) {
-        showToast("Failed to move to cart", "error");
+        showToast("Could not move to cart", "error");
       }
     }
 
@@ -82,7 +130,7 @@
       const items = Wishlist.get().filter(i => i.id !== id);
       Wishlist.save(items);
       renderWishlist();
-      showToast("Removed from wishlist", "warning");
+      showToast("Removed", "warning");
     }
 
     renderWishlist();

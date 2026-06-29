@@ -6,78 +6,161 @@
   <title>Shop — Clothyk</title>
   <link rel="stylesheet" href="/static/css/shared.css">
   <style>
-    .page-header-bar {
-      background: linear-gradient(135deg, var(--primary-dark), var(--primary));
-      color: #fff;
-      padding: 32px 24px;
-      text-align: center;
+    .shop-header {
+      padding: 56px 0 40px;
+      border-bottom: 1px solid var(--border);
     }
-    .page-header-bar h1 { font-size: 1.8rem; font-weight: 900; margin-bottom: 8px; }
-    .page-header-bar p { opacity: .8; }
 
-    .gender-tabs {
-      display: flex;
-      background: #fff;
-      border-bottom: 2px solid var(--border);
+    .shop-header-inner {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 0 32px;
+    }
+
+    .shop-eyebrow {
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--gold);
+      font-weight: 500;
+      margin-bottom: 10px;
+    }
+
+    .shop-title {
+      font-family: var(--font-display);
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 700;
+      color: var(--off-white);
+      line-height: 1.1;
+    }
+
+    /* ─── GENDER TABS ─────────────────────────────────────── */
+    .gender-tabs-bar {
+      background: var(--black);
+      border-bottom: 1px solid var(--border);
       position: sticky;
-      top: 64px;
+      top: 60px;
       z-index: 50;
     }
+
+    .gender-tabs-inner {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 0 32px;
+      display: flex;
+    }
+
     .gender-tab {
-      flex: 1;
-      padding: 16px;
-      text-align: center;
-      font-weight: 700;
-      cursor: pointer;
+      flex: none;
+      padding: 18px 32px;
       border: none;
       background: none;
-      font-size: 1rem;
+      font-family: var(--font-body);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
       color: var(--muted);
-      border-bottom: 3px solid transparent;
-      transition: all .2s;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+      position: relative;
+      bottom: -1px;
     }
+
     .gender-tab.active {
-      color: var(--primary);
-      border-bottom-color: var(--primary);
-      background: #FAF8FF;
+      color: var(--gold);
+      border-bottom-color: var(--gold);
     }
 
-    .filters-bar {
-      display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
-      background: #fff; padding: 16px;
-      border-bottom: 1px solid var(--border);
-      position: sticky; top: 114px; z-index: 40;
-    }
-    .filters-bar input { flex: 1; min-width: 180px; }
+    .gender-tab:hover:not(.active) { color: var(--off-white); }
 
-    .cats-scroll {
-      display: flex; gap: 8px; overflow-x: auto;
-      padding: 12px 0; scrollbar-width: none;
+    /* ─── FILTERS ─────────────────────────────────────────── */
+    .filters-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      padding: 20px 0;
     }
-    .cats-scroll::-webkit-scrollbar { display: none; }
+
+    .cats-scroll-shop {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      flex: 1;
+      scrollbar-width: none;
+    }
+    .cats-scroll-shop::-webkit-scrollbar { display: none; }
+
     .cat-pill {
-      display: flex; align-items: center; gap: 6px;
-      padding: 6px 16px; border-radius: 999px;
-      border: 2px solid var(--border);
-      background: #fff; cursor: pointer;
-      font-size: 0.85rem; font-weight: 600;
-      white-space: nowrap; transition: all .2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 18px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: transparent;
+      cursor: pointer;
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .cat-pill:hover { border-color: var(--gold); color: var(--gold); }
+    .cat-pill.active { background: var(--gold); border-color: var(--gold); color: var(--black); }
+
+    .sort-select {
+      background: var(--black-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--muted);
+      font-family: var(--font-body);
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      padding: 9px 32px 9px 14px;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23666' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      outline: none;
+      transition: border-color 0.2s;
       flex-shrink: 0;
     }
-    .cat-pill:hover { border-color: var(--primary); color: var(--primary); }
-    .cat-pill.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .sort-select:focus { border-color: var(--gold); }
 
+    /* ─── RESULTS BAR ─────────────────────────────────────── */
     .results-bar {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 0; color: var(--muted); font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0 24px;
+      border-top: 1px solid var(--border);
+      font-size: 0.78rem;
+      color: var(--muted);
+      letter-spacing: 0.06em;
     }
-    .empty-state { text-align: center; padding: 64px 24px; color: var(--muted); grid-column: 1/-1; }
-    .empty-state .emoji { font-size: 3rem; margin-bottom: 12px; }
+
+    .empty-state { text-align: center; padding: 80px 24px; color: var(--muted); grid-column: 1/-1; }
+
+    @media (max-width: 768px) {
+      .shop-header { padding: 36px 0 28px; }
+      .shop-header-inner { padding: 0 20px; }
+      .gender-tabs-inner { padding: 0 20px; }
+      .gender-tab { padding: 16px 20px; }
+      .gender-tabs-bar { top: 60px; }
+      .filters-row { padding: 16px 0; }
+    }
   </style>
 </head>
 <body>
+
   <nav class="navbar">
-    <a href="/" class="nav-logo">👗 Clothyk</a>
+    <a href="/" class="nav-logo">Clothyk</a>
     <div class="nav-links">
       <a href="/">Home</a>
       <a href="/products?gender=Girls">Girls</a>
@@ -85,46 +168,77 @@
       <a href="/wishlist">Wishlist</a>
     </div>
     <div class="nav-actions">
-      <button class="nav-icon-btn" onclick="window.location='/wishlist'">❤️ <span id="wishlist-badge" class="nav-badge" style="display:none">0</span></button>
-      <button class="nav-icon-btn" onclick="window.location='/cart'">🛍️ <span id="cart-badge" class="nav-badge" style="display:none">0</span></button>
+      <button class="nav-icon-btn" onclick="window.location='/wishlist'" title="Wishlist">
+        <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        <span id="wishlist-badge" class="nav-badge" style="display:none">0</span>
+      </button>
+      <button class="nav-icon-btn" onclick="window.location='/cart'" title="Cart">
+        <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        <span id="cart-badge" class="nav-badge" style="display:none">0</span>
+      </button>
+      <button class="hamburger" id="hamburger-btn" onclick="toggleMobileMenu()">
+        <svg viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" fill="none" stroke="currentColor"><line x1="3" y1="7" x2="21" y2="7"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="17" x2="21" y2="17"/></svg>
+      </button>
     </div>
   </nav>
+  <div id="mobile-nav" class="mobile-nav">
+    <a href="/">Home</a>
+    <a href="/products?gender=Girls">Girls Collection</a>
+    <a href="/products?gender=Boys">Boys Collection</a>
+    <a href="/wishlist">Wishlist</a>
+    <a href="/cart">Cart</a>
+  </div>
 
   <!-- Page Header -->
-  <div class="page-header-bar">
-    <h1 id="page-title">👗 Shop All</h1>
-    <p>Handpicked styles from local boutiques</p>
+  <div class="shop-header">
+    <div class="shop-header-inner">
+      <div class="shop-eyebrow">Clothyk Store</div>
+      <h1 class="shop-title" id="page-title">All Collections</h1>
+    </div>
   </div>
 
   <!-- Gender Tabs -->
-  <div class="gender-tabs">
-    <button class="gender-tab" id="tab-Girls" onclick="switchGender('Girls')">👗 Girls</button>
-    <button class="gender-tab" id="tab-Boys" onclick="switchGender('Boys')">👕 Boys</button>
+  <div class="gender-tabs-bar">
+    <div class="gender-tabs-inner">
+      <button class="gender-tab" id="tab-Girls" onclick="switchGender('Girls')">Girls</button>
+      <button class="gender-tab" id="tab-Boys" onclick="switchGender('Boys')">Boys</button>
+    </div>
   </div>
 
-  <div class="container" style="padding-top:20px;padding-bottom:64px">
-    <!-- Search & Sort -->
-    <div class="filters-bar" style="position:relative;top:0;border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px">
-      <input class="form-control" type="search" id="search" placeholder="🔍 Search..." style="flex:1">
-      <select class="form-control" id="sort" style="min-width:160px">
+  <div class="container" style="padding-top:28px; padding-bottom:80px">
+
+    <!-- Filters -->
+    <div class="filters-row">
+      <div class="cats-scroll-shop" id="cat-pills"></div>
+      <select class="sort-select" id="sort" onchange="loadProducts()">
         <option value="">Latest First</option>
-        <option value="price_asc">Price: Low to High</option>
-        <option value="price_desc">Price: High to Low</option>
+        <option value="price_asc">Price: Low → High</option>
+        <option value="price_desc">Price: High → Low</option>
       </select>
     </div>
 
-    <!-- Category Pills -->
-    <div class="cats-scroll" id="cat-pills"></div>
-
     <!-- Results -->
     <div class="results-bar">
-      <span id="results-info"></span>
+      <span id="results-info" style="letter-spacing:0.1em"></span>
     </div>
+
     <div class="product-grid" id="products-grid"></div>
   </div>
 
   <footer>
-    <p style="opacity:.7">© 2024 Clothyk. Trendy fashion across India 🇮🇳</p>
+    <div class="footer-inner">
+      <div>
+        <div class="footer-brand">Clothyk</div>
+        <p class="footer-tagline">Curated fashion across India</p>
+        <div class="footer-links">
+          <a href="/products?gender=Girls">Girls</a>
+          <a href="/products?gender=Boys">Boys</a>
+          <a href="/cart">Cart</a>
+          <a href="/wishlist">Wishlist</a>
+        </div>
+      </div>
+    </div>
+    <p class="footer-copy">© 2025 Clothyk. All rights reserved.</p>
   </footer>
 
   <div id="toast-container"></div>
@@ -132,16 +246,13 @@
   <script>
     let currentGender = 'Girls';
     let currentCat = null;
-    let debounceTimer;
 
     const urlParams = new URLSearchParams(location.search);
     const urlGender = urlParams.get('gender');
     const urlCat = urlParams.get('category');
 
     async function init() {
-      if (urlGender === 'Boys') {
-        currentGender = 'Boys';
-      }
+      if (urlGender === 'Boys') currentGender = 'Boys';
       if (urlCat) currentCat = urlCat;
       updateGenderUI();
       await loadCategories();
@@ -151,22 +262,18 @@
     function updateGenderUI() {
       document.getElementById('tab-Girls').classList.toggle('active', currentGender === 'Girls');
       document.getElementById('tab-Boys').classList.toggle('active', currentGender === 'Boys');
-      document.getElementById('page-title').textContent = currentGender === 'Girls' ? '👗 Girls Collection' : '👕 Boys Collection';
+      document.getElementById('page-title').textContent = currentGender === 'Girls' ? 'Girls Collection' : 'Boys Collection';
     }
 
     async function loadCategories() {
       try {
         const cats = await apiFetch(`/api/categories/?gender=${currentGender}`);
         const pills = document.getElementById('cat-pills');
-        pills.innerHTML = `
-          <div class="cat-pill ${!currentCat ? 'active' : ''}" onclick="selectCat(null, this)">
-            ✨ All
-          </div>
-        `;
+        pills.innerHTML = `<div class="cat-pill ${!currentCat ? 'active' : ''}" onclick="selectCat(null, this)">All</div>`;
         cats.forEach(cat => {
           const pill = document.createElement('div');
           pill.className = `cat-pill ${currentCat === cat.name ? 'active' : ''}`;
-          pill.innerHTML = `${cat.icon} ${cat.name}`;
+          pill.textContent = cat.name;
           pill.onclick = () => selectCat(cat.name, pill);
           pills.appendChild(pill);
         });
@@ -183,32 +290,21 @@
     async function loadProducts() {
       const grid = document.getElementById('products-grid');
       skeletonCards(grid, 8);
-
-      const search = document.getElementById('search').value;
       const sort = document.getElementById('sort').value;
-
-      const params = new URLSearchParams();
-      params.set('gender', currentGender);
-      if (search) params.set('search', search);
+      const params = new URLSearchParams({ gender: currentGender });
       if (currentCat) params.set('category', currentCat);
       if (sort) params.set('sort', sort);
-
       try {
         const products = await apiFetch(`/api/products/?${params}`);
-        document.getElementById('results-info').textContent = `${products.length} product${products.length !== 1 ? 's' : ''} found`;
-
+        const info = document.getElementById('results-info');
+        info.textContent = `${products.length} item${products.length !== 1 ? 's' : ''}`;
         if (!products.length) {
-          grid.innerHTML = `
-            <div class="empty-state">
-              <div class="emoji">🔍</div>
-              <h3>No products found</h3>
-              <p>Try different filters or check back later</p>
-            </div>`;
+          grid.innerHTML = `<div class="empty-state"><svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><h3>No items found</h3><p>Try a different category or check back later</p></div>`;
           return;
         }
         grid.innerHTML = products.map(p => renderProductCard(p)).join('');
       } catch(e) {
-        grid.innerHTML = `<div class="empty-state"><div class="emoji">⚠️</div><p>Failed to load. Try again.</p></div>`;
+        grid.innerHTML = `<div class="empty-state"><h3>Something went wrong</h3><p>Please refresh the page</p></div>`;
       }
     }
 
@@ -219,12 +315,6 @@
       loadCategories();
       loadProducts();
     }
-
-    document.getElementById('search').addEventListener('input', () => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(loadProducts, 400);
-    });
-    document.getElementById('sort').addEventListener('change', loadProducts);
 
     init();
   </script>

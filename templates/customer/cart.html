@@ -3,71 +3,345 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Cart — Clothyk</title>
+  <title>Cart — Clothyk</title>
   <link rel="stylesheet" href="/static/css/shared.css">
   <style>
-    .cart-layout { display: grid; grid-template-columns: 1fr 340px; gap: 32px; align-items: start; }
-    .cart-item { display: flex; gap: 16px; padding: 16px; background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 12px; }
-    .cart-item img { width: 90px; height: 110px; object-fit: cover; border-radius: 10px; flex-shrink: 0; }
-    .cart-item-info { flex: 1; }
-    .cart-item-name { font-weight: 700; margin-bottom: 4px; }
-    .cart-item-meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 8px; }
-    .cart-item-price { color: var(--primary); font-weight: 700; font-size: 1.1rem; }
-    .qty-control { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-    .qty-btn { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--primary); background: none; color: var(--primary); font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; }
-    .qty-btn:hover { background: var(--primary); color: #fff; }
-    .order-summary { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; position: sticky; top: 80px; }
-    .summary-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
-    .summary-total { display: flex; justify-content: space-between; padding: 12px 0; font-weight: 800; font-size: 1.1rem; color: var(--primary); }
-    .empty-cart { text-align: center; padding: 80px 24px; }
-    @media (max-width: 900px) { .cart-layout { grid-template-columns: 1fr; } }
+    .cart-layout {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 40px;
+      align-items: start;
+      padding: 48px 0 80px;
+    }
+
+    /* ─── PAGE HEADER ─────────────────────────────────────── */
+    .page-head {
+      padding: 48px 0 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 0;
+    }
+
+    .page-head-inner {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding-bottom: 28px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    /* ─── CART ITEMS ──────────────────────────────────────── */
+    .cart-items-col {}
+
+    .cart-item {
+      display: flex;
+      gap: 20px;
+      padding: 24px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+    }
+
+    .cart-item:first-child { padding-top: 0; }
+
+    .cart-item-img {
+      width: 100px;
+      height: 126px;
+      object-fit: cover;
+      border-radius: var(--radius);
+      flex-shrink: 0;
+      background: var(--black-3);
+    }
+
+    .cart-item-info { flex: 1; min-width: 0; }
+
+    .cart-item-cat {
+      font-size: 0.68rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 4px;
+    }
+
+    .cart-item-name {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--off-white);
+      margin-bottom: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cart-item-meta {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .qty-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .qty-ctrl {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+
+    .qty-btn {
+      width: 34px;
+      height: 34px;
+      background: var(--black-3);
+      border: none;
+      color: var(--muted);
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+      font-family: var(--font-body);
+    }
+    .qty-btn:hover { background: var(--black-4); color: var(--off-white); }
+
+    .qty-num {
+      width: 40px;
+      text-align: center;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--off-white);
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      line-height: 34px;
+    }
+
+    .remove-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted-2);
+      font-family: var(--font-body);
+      transition: color 0.2s;
+      padding: 0;
+    }
+    .remove-btn:hover { color: var(--danger); }
+
+    .cart-item-price {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--gold);
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    /* ─── ORDER SUMMARY ───────────────────────────────────── */
+    .order-summary {
+      background: var(--black-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      position: sticky;
+      top: 80px;
+    }
+
+    .summary-title {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--off-white);
+      margin-bottom: 24px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 10px 0;
+      font-size: 0.85rem;
+      color: var(--muted);
+      gap: 12px;
+    }
+
+    .summary-row span:first-child {
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .summary-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 12px 0;
+    }
+
+    .summary-total {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0 24px;
+      font-weight: 700;
+      color: var(--off-white);
+    }
+
+    .summary-total-label {
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .summary-total-price {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      color: var(--gold);
+    }
+
+    .summary-note {
+      text-align: center;
+      font-size: 0.72rem;
+      color: var(--muted-2);
+      margin-top: 12px;
+      line-height: 1.5;
+    }
+
+    /* ─── EMPTY ───────────────────────────────────────────── */
+    .empty-cart {
+      text-align: center;
+      padding: 100px 32px;
+    }
+
+    .empty-cart-icon {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 24px;
+      opacity: 0.2;
+    }
+
+    .empty-cart-icon svg {
+      width: 100%;
+      height: 100%;
+      stroke: var(--off-white);
+      fill: none;
+      stroke-width: 1.2;
+    }
+
+    @media (max-width: 900px) {
+      .cart-layout { grid-template-columns: 1fr; }
+      .order-summary { position: static; }
+    }
+
+    @media (max-width: 768px) {
+      .cart-layout { padding: 32px 0 60px; gap: 28px; }
+      .page-head { padding: 32px 0 0; }
+      .cart-item { gap: 14px; }
+      .cart-item-img { width: 80px; height: 102px; }
+    }
   </style>
 </head>
 <body>
+
   <nav class="navbar">
-    <a href="/" class="nav-logo">👗 Clothyk</a>
+    <a href="/" class="nav-logo">Clothyk</a>
     <div class="nav-links">
       <a href="/">Home</a>
       <a href="/products">Shop</a>
       <a href="/wishlist">Wishlist</a>
     </div>
     <div class="nav-actions">
-      <button class="nav-icon-btn" onclick="window.location='/wishlist'">❤️ <span id="wishlist-badge" class="nav-badge" style="display:none">0</span></button>
-      <button class="nav-icon-btn" onclick="window.location='/cart'">🛍️ <span id="cart-badge" class="nav-badge" style="display:none">0</span></button>
+      <button class="nav-icon-btn" onclick="window.location='/wishlist'" title="Wishlist">
+        <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        <span id="wishlist-badge" class="nav-badge" style="display:none">0</span>
+      </button>
+      <button class="nav-icon-btn" onclick="window.location='/cart'" title="Cart">
+        <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        <span id="cart-badge" class="nav-badge" style="display:none">0</span>
+      </button>
+      <button class="hamburger" id="hamburger-btn" onclick="toggleMobileMenu()">
+        <svg viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" fill="none" stroke="currentColor"><line x1="3" y1="7" x2="21" y2="7"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="17" x2="21" y2="17"/></svg>
+      </button>
     </div>
   </nav>
+  <div id="mobile-nav" class="mobile-nav">
+    <a href="/">Home</a>
+    <a href="/products">Shop All</a>
+    <a href="/wishlist">Wishlist</a>
+  </div>
 
-  <div class="container" style="padding-top:32px;padding-bottom:48px">
-    <h1 style="font-size:1.8rem;font-weight:800;margin-bottom:8px">🛍️ Your Cart</h1>
+  <div class="container">
 
-    <div id="empty-cart" class="empty-cart" style="display:none">
-      <div style="font-size:4rem;margin-bottom:16px">🛒</div>
-      <h2 style="margin-bottom:8px">Your cart is empty</h2>
-      <p style="color:var(--muted);margin-bottom:24px">Looks like you haven't added any items yet</p>
-      <a href="/products" class="btn btn-primary btn-lg">Continue Shopping</a>
+    <!-- Page Head -->
+    <div class="page-head">
+      <div class="page-head-inner">
+        <div>
+          <div class="section-eyebrow">Your Selection</div>
+          <h1 class="section-title">Shopping Cart</h1>
+        </div>
+        <a href="/products" class="btn btn-ghost btn-sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Continue Shopping
+        </a>
+      </div>
     </div>
 
-    <div id="cart-content" class="cart-layout">
-      <div>
-        <div id="cart-items"></div>
-        <a href="/products" style="color:var(--primary);font-size:0.9rem;font-weight:600">← Continue Shopping</a>
+    <!-- Empty State -->
+    <div id="empty-cart" class="empty-cart" style="display:none">
+      <div class="empty-cart-icon">
+        <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
       </div>
+      <h2 class="section-title" style="margin-bottom:10px">Your cart is empty</h2>
+      <p style="color:var(--muted);font-size:0.88rem;margin-bottom:32px">Browse our collection and find something you love</p>
+      <a href="/products" class="btn btn-primary btn-lg">Explore Collection</a>
+    </div>
+
+    <!-- Cart Layout -->
+    <div id="cart-content" class="cart-layout">
+      <!-- Items -->
+      <div class="cart-items-col">
+        <div id="cart-items"></div>
+      </div>
+
+      <!-- Summary -->
       <div class="order-summary">
-        <h3 style="margin-bottom:16px;font-weight:800">Order Summary</h3>
+        <div class="summary-title">Order Summary</div>
         <div id="summary-rows"></div>
+        <div class="summary-divider"></div>
         <div class="summary-total">
-          <span>Total</span>
-          <span id="total-price"></span>
+          <span class="summary-total-label">Total</span>
+          <span class="summary-total-price" id="total-price"></span>
         </div>
-        <a href="/checkout" class="btn btn-primary btn-lg btn-block" style="margin-top:16px">
-          Proceed to Checkout →
+        <a href="/checkout" class="btn btn-primary btn-block btn-lg">
+          Proceed to Checkout
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
         </a>
-        <p style="color:var(--muted);font-size:0.8rem;text-align:center;margin-top:12px">
-          Secure checkout via WhatsApp · UPI or COD
-        </p>
+        <p class="summary-note">Secure checkout · Pay via WhatsApp<br>UPI or Cash on Delivery accepted</p>
       </div>
     </div>
   </div>
+
+  <footer>
+    <div class="footer-inner">
+      <div>
+        <div class="footer-brand">Clothyk</div>
+        <div class="footer-links">
+          <a href="/products?gender=Girls">Girls</a>
+          <a href="/products?gender=Boys">Boys</a>
+          <a href="/wishlist">Wishlist</a>
+        </div>
+      </div>
+    </div>
+    <p class="footer-copy">© 2025 Clothyk. All rights reserved.</p>
+  </footer>
 
   <div id="toast-container"></div>
   <script src="/static/js/shared.js"></script>
@@ -87,28 +361,30 @@
 
       document.getElementById("cart-items").innerHTML = items.map((item, idx) => `
         <div class="cart-item">
-          <img src="${item.image || '/static/images/placeholder.svg'}" alt="${item.name}">
+          <img class="cart-item-img" src="${item.image || '/static/images/placeholder.svg'}" alt="${item.name}">
           <div class="cart-item-info">
             <div class="cart-item-name">${item.name}</div>
-            <div class="cart-item-meta">Size: ${item.size} · Color: ${item.color}</div>
-            <div class="cart-item-price">${formatPrice(item.price)}</div>
-            <div class="qty-control">
-              <button class="qty-btn" onclick="changeQty(${idx}, -1)">−</button>
-              <span style="font-weight:700">${item.qty || 1}</span>
-              <button class="qty-btn" onclick="changeQty(${idx}, 1)">+</button>
-              <button onclick="removeItem('${item.id}','${item.size}','${item.color}')" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--danger);font-size:0.85rem;font-weight:600">Remove</button>
+            <div class="cart-item-meta">Size: ${item.size} &middot; Colour: ${item.color}</div>
+            <div class="qty-row">
+              <div class="qty-ctrl">
+                <button class="qty-btn" onclick="changeQty(${idx}, -1)">−</button>
+                <span class="qty-num">${item.qty || 1}</span>
+                <button class="qty-btn" onclick="changeQty(${idx}, 1)">+</button>
+              </div>
+              <button class="remove-btn" onclick="removeItem('${item.id}','${item.size}','${item.color}')">Remove</button>
             </div>
           </div>
+          <div class="cart-item-price">${formatPrice(item.price * (item.qty || 1))}</div>
         </div>
       `).join("");
 
-      const summaryRows = items.map(i => `
+      document.getElementById("summary-rows").innerHTML = items.map(i => `
         <div class="summary-row">
           <span>${i.name} × ${i.qty || 1}</span>
-          <span>${formatPrice(i.price * (i.qty || 1))}</span>
+          <span style="color:var(--off-white);font-weight:500">${formatPrice(i.price * (i.qty || 1))}</span>
         </div>
       `).join("");
-      document.getElementById("summary-rows").innerHTML = summaryRows;
+
       document.getElementById("total-price").textContent = formatPrice(Cart.total());
     }
 

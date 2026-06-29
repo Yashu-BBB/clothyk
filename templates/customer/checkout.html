@@ -7,85 +7,363 @@
   <link rel="stylesheet" href="/static/css/shared.css">
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <style>
-    .checkout-layout { display: grid; grid-template-columns: 1fr 360px; gap: 32px; align-items: start; padding: 40px 0 64px; }
-    .checkout-form-card { background: #fff; border-radius: var(--radius); padding: 32px; box-shadow: var(--shadow); }
-    .order-summary-card { background: #fff; border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); position: sticky; top: 80px; }
-    .order-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
-    .order-item img { width: 60px; height: 74px; object-fit: cover; border-radius: 8px; }
-    .order-item-info { flex: 1; }
-    .order-item-name { font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
-    .order-item-meta { color: var(--muted); font-size: 0.8rem; }
-    .order-item-price { font-weight: 700; color: var(--primary); }
-    .summary-total { display: flex; justify-content: space-between; padding: 16px 0 0; font-weight: 800; font-size: 1.15rem; color: var(--primary); }
-    @media (max-width: 900px) { .checkout-layout { grid-template-columns: 1fr; } }
+    .checkout-layout {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 48px;
+      align-items: start;
+      padding: 48px 0 80px;
+    }
+
+    /* ─── PAGE HEADER ─────────────────────────────────────── */
+    .checkout-head {
+      padding: 48px 0 40px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ─── PROGRESS ────────────────────────────────────────── */
+    .checkout-progress {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 36px;
+      margin-top: 8px;
+    }
+
+    .progress-step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted-2);
+      font-weight: 500;
+    }
+
+    .progress-step.done { color: var(--gold); }
+    .progress-step.active { color: var(--off-white); }
+
+    .progress-dot {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.6rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      background: transparent;
+      color: var(--muted-2);
+    }
+
+    .progress-step.done .progress-dot {
+      background: var(--gold);
+      border-color: var(--gold);
+      color: var(--black);
+    }
+
+    .progress-step.active .progress-dot {
+      border-color: var(--off-white);
+      color: var(--off-white);
+    }
+
+    .progress-line {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+      margin: 0 12px;
+      max-width: 48px;
+    }
+
+    /* ─── FORM CARD ───────────────────────────────────────── */
+    .form-card {
+      background: var(--black-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 36px;
+    }
+
+    .form-card-title {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--off-white);
+      margin-bottom: 28px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Phone input with flag */
+    .phone-wrap {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+    }
+
+    .phone-prefix {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 14px;
+      background: var(--black-3);
+      border: 1px solid var(--border);
+      border-right: none;
+      border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .phone-wrap .form-control {
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    }
+
+    /* ─── ORDER SUMMARY ───────────────────────────────────── */
+    .summary-card {
+      background: var(--black-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      position: sticky;
+      top: 80px;
+    }
+
+    .summary-card-title {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--off-white);
+      margin-bottom: 20px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .order-item {
+      display: flex;
+      gap: 14px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+    }
+
+    .order-item:last-of-type { border-bottom: none; }
+
+    .order-item-img {
+      width: 56px;
+      height: 70px;
+      object-fit: cover;
+      border-radius: var(--radius-sm);
+      background: var(--black-3);
+      flex-shrink: 0;
+    }
+
+    .order-item-info { flex: 1; min-width: 0; }
+
+    .order-item-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--off-white);
+      margin-bottom: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .order-item-meta {
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .order-item-price {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--gold);
+      white-space: nowrap;
+    }
+
+    .summary-total-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 18px 0 0;
+      margin-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    .total-label {
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .total-amount {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--gold);
+    }
+
+    /* ─── CAPTCHA ─────────────────────────────────────────── */
+    .captcha-wrap {
+      margin-bottom: 24px;
+    }
+
+    /* ─── PLACE ORDER ─────────────────────────────────────── */
+    .place-order-note {
+      text-align: center;
+      font-size: 0.72rem;
+      color: var(--muted-2);
+      margin-top: 12px;
+      line-height: 1.6;
+    }
+
+    /* ─── EMPTY ───────────────────────────────────────────── */
+    .empty-checkout {
+      text-align: center;
+      padding: 100px 0;
+    }
+
+    @media (max-width: 900px) {
+      .checkout-layout {
+        grid-template-columns: 1fr;
+        gap: 28px;
+      }
+      .summary-card { position: static; order: -1; }
+    }
+
+    @media (max-width: 768px) {
+      .checkout-layout { padding: 28px 0 60px; }
+      .checkout-head { padding: 32px 0 28px; }
+      .form-card { padding: 24px 20px; }
+      .summary-card { padding: 20px; }
+      .checkout-progress { display: none; }
+    }
   </style>
 </head>
 <body>
+
   <nav class="navbar">
-    <a href="/" class="nav-logo">👗 Clothyk</a>
+    <a href="/" class="nav-logo">Clothyk</a>
     <div class="nav-actions">
-      <button class="nav-icon-btn" onclick="window.location='/cart'">🛍️ <span id="cart-badge" class="nav-badge" style="display:none">0</span></button>
+      <button class="nav-icon-btn" onclick="window.location='/cart'" title="Cart">
+        <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        <span id="cart-badge" class="nav-badge" style="display:none">0</span>
+      </button>
     </div>
   </nav>
 
   <div class="container">
-    <div id="empty-cart-msg" style="display:none;text-align:center;padding:80px 24px">
-      <div style="font-size:3rem;margin-bottom:12px">🛒</div>
-      <h2>Your cart is empty</h2>
-      <a href="/products" class="btn btn-primary" style="margin-top:16px">Browse Products</a>
+
+    <!-- Page Head -->
+    <div class="checkout-head">
+      <div class="section-eyebrow">Almost there</div>
+      <h1 class="section-title">Checkout</h1>
+
+      <!-- Progress indicator -->
+      <div class="checkout-progress">
+        <div class="progress-step done">
+          <div class="progress-dot">✓</div>
+          <span>Cart</span>
+        </div>
+        <div class="progress-line"></div>
+        <div class="progress-step active">
+          <div class="progress-dot">2</div>
+          <span>Details</span>
+        </div>
+        <div class="progress-line"></div>
+        <div class="progress-step">
+          <div class="progress-dot">3</div>
+          <span>WhatsApp</span>
+        </div>
+      </div>
     </div>
 
+    <!-- Empty cart message -->
+    <div id="empty-cart-msg" class="empty-checkout" style="display:none">
+      <div class="section-eyebrow" style="margin-bottom:12px">Nothing here</div>
+      <h2 class="section-title" style="margin-bottom:24px">Your cart is empty</h2>
+      <a href="/products" class="btn btn-primary btn-lg">Browse Products</a>
+    </div>
+
+    <!-- Checkout Layout -->
     <div class="checkout-layout" id="checkout-layout">
-      <!-- Form -->
-      <div class="checkout-form-card">
-        <h2 style="font-weight:800;margin-bottom:24px">📋 Delivery Details</h2>
+
+      <!-- Delivery Form -->
+      <div class="form-card">
+        <div class="form-card-title">Delivery Details</div>
+
         <div id="form-alert"></div>
+
         <div class="form-group">
           <label class="form-label">Full Name *</label>
-          <input class="form-control" id="customer_name" placeholder="Your full name" required>
+          <input class="form-control" id="customer_name" placeholder="Your full name" autocomplete="name">
           <div class="form-error" id="err-name"></div>
         </div>
+
         <div class="form-group">
           <label class="form-label">WhatsApp / Phone Number *</label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <span style="background:#f3f0ff;border:2px solid var(--border);padding:10px 12px;border-radius:8px;font-weight:600;white-space:nowrap">🇮🇳 +91</span>
-            <input class="form-control" id="customer_phone" placeholder="10-digit mobile number" maxlength="10" inputmode="numeric">
+          <div class="phone-wrap">
+            <div class="phone-prefix">🇮🇳 +91</div>
+            <input class="form-control" id="customer_phone"
+              placeholder="10-digit mobile number"
+              maxlength="10"
+              inputmode="numeric"
+              autocomplete="tel-national">
           </div>
           <div class="form-error" id="err-phone"></div>
         </div>
+
         <div class="form-group">
           <label class="form-label">Complete Address *</label>
-          <textarea class="form-control" id="customer_address" rows="3" placeholder="House/Flat No., Street, Area, Landmark"></textarea>
+          <textarea class="form-control" id="customer_address" rows="3"
+            placeholder="House/Flat No., Street, Area, Landmark"
+            autocomplete="street-address"></textarea>
           <div class="form-error" id="err-address"></div>
         </div>
+
         <div class="form-group">
           <label class="form-label">City *</label>
-          <input class="form-control" id="customer_city" placeholder="Your city">
+          <input class="form-control" id="customer_city"
+            placeholder="Your city"
+            autocomplete="address-level2">
           <div class="form-error" id="err-city"></div>
         </div>
 
         <!-- Turnstile CAPTCHA -->
-        <div class="form-group">
+        <div class="captcha-wrap">
           <div class="cf-turnstile" data-sitekey="0x4AAAAAADrUAQmH1f5HqXtJ" id="turnstile-widget"></div>
         </div>
 
-        <button class="btn btn-success btn-lg btn-block" onclick="placeOrder()" id="order-btn">
-          💬 Order via WhatsApp
+        <button class="btn btn-whatsapp btn-block btn-xl" onclick="placeOrder()" id="order-btn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+          </svg>
+          Place Order via WhatsApp
         </button>
-        <p style="color:var(--muted);font-size:0.8rem;text-align:center;margin-top:12px">
-          You'll be redirected to WhatsApp to complete payment · UPI or Cash on Delivery
+        <p class="place-order-note">
+          You'll be redirected to WhatsApp to complete payment<br>
+          UPI or Cash on Delivery · 100% secure
         </p>
       </div>
 
       <!-- Order Summary -->
-      <div class="order-summary-card">
-        <h3 style="font-weight:800;margin-bottom:16px">🛍️ Order Summary</h3>
+      <div class="summary-card">
+        <div class="summary-card-title">Your Order</div>
         <div id="summary-items"></div>
-        <div class="summary-total">
-          <span>Total</span>
-          <span id="summary-total"></span>
+        <div class="summary-total-row">
+          <span class="total-label">Total</span>
+          <span class="total-amount" id="summary-total"></span>
         </div>
-        <a href="/cart" style="display:block;text-align:center;color:var(--primary);font-size:0.85rem;margin-top:12px;font-weight:600">← Edit Cart</a>
+        <a href="/cart" class="btn btn-ghost btn-block btn-sm" style="margin-top:16px">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Edit Cart
+        </a>
       </div>
     </div>
   </div>
@@ -93,8 +371,6 @@
   <div id="toast-container"></div>
   <script src="/static/js/shared.js"></script>
   <script>
-    const WA_NUMBER = "YOUR_WA_NUMBER"; // fallback
-
     function renderSummary() {
       const items = Cart.get();
       if (!items.length) {
@@ -102,40 +378,54 @@
         document.getElementById("empty-cart-msg").style.display = "block";
         return;
       }
+
       document.getElementById("summary-items").innerHTML = items.map(item => `
         <div class="order-item">
-          <img src="${item.image || '/static/images/placeholder.svg'}" alt="${item.name}">
+          <img class="order-item-img" src="${item.image || '/static/images/placeholder.svg'}" alt="${item.name}">
           <div class="order-item-info">
             <div class="order-item-name">${item.name}</div>
-            <div class="order-item-meta">Size: ${item.size} · Color: ${item.color} · Qty: ${item.qty || 1}</div>
+            <div class="order-item-meta">
+              ${item.size} · ${item.color} · Qty ${item.qty || 1}
+            </div>
           </div>
           <div class="order-item-price">${formatPrice(item.price * (item.qty || 1))}</div>
         </div>
       `).join("");
+
       document.getElementById("summary-total").textContent = formatPrice(Cart.total());
     }
 
     function validate() {
       let ok = true;
-      const name = document.getElementById("customer_name").value.trim();
-      const phone = document.getElementById("customer_phone").value.trim();
+      const name    = document.getElementById("customer_name").value.trim();
+      const phone   = document.getElementById("customer_phone").value.trim();
       const address = document.getElementById("customer_address").value.trim();
-      const city = document.getElementById("customer_city").value.trim();
+      const city    = document.getElementById("customer_city").value.trim();
 
       document.querySelectorAll(".form-error").forEach(e => e.textContent = "");
       document.querySelectorAll(".form-control").forEach(e => e.classList.remove("error"));
 
-      if (!name) { showError("customer_name", "err-name", "Name is required"); ok = false; }
-      if (!/^\d{10}$/.test(phone)) { showError("customer_phone", "err-phone", "Enter valid 10-digit number"); ok = false; }
-      if (!address || address.length < 10) { showError("customer_address", "err-address", "Enter complete address"); ok = false; }
-      if (!city) { showError("customer_city", "err-city", "City is required"); ok = false; }
-
+      if (!name) {
+        document.getElementById("customer_name").classList.add("error");
+        document.getElementById("err-name").textContent = "Name is required";
+        ok = false;
+      }
+      if (!/^\d{10}$/.test(phone)) {
+        document.getElementById("customer_phone").classList.add("error");
+        document.getElementById("err-phone").textContent = "Enter a valid 10-digit number";
+        ok = false;
+      }
+      if (!address || address.length < 10) {
+        document.getElementById("customer_address").classList.add("error");
+        document.getElementById("err-address").textContent = "Please enter your complete address";
+        ok = false;
+      }
+      if (!city) {
+        document.getElementById("customer_city").classList.add("error");
+        document.getElementById("err-city").textContent = "City is required";
+        ok = false;
+      }
       return ok;
-    }
-
-    function showError(fieldId, errId, msg) {
-      document.getElementById(fieldId)?.classList.add("error");
-      document.getElementById(errId).textContent = msg;
     }
 
     async function placeOrder() {
@@ -148,21 +438,18 @@
 
       const btn = document.getElementById("order-btn");
       btn.disabled = true;
-      btn.textContent = "⏳ Placing order...";
+      btn.innerHTML = `<span style="opacity:0.6">Placing order…</span>`;
 
-      // For multi-item carts, we create orders per item
-      // (Each product in Clothyk is unique - one sold = removed)
-      const item = items[0]; // Primary item
-
+      const item = items[0];
       const orderData = {
-        customer_name: document.getElementById("customer_name").value.trim(),
-        customer_phone: document.getElementById("customer_phone").value.trim(),
+        customer_name:    document.getElementById("customer_name").value.trim(),
+        customer_phone:   document.getElementById("customer_phone").value.trim(),
         customer_address: document.getElementById("customer_address").value.trim(),
-        customer_city: document.getElementById("customer_city").value.trim(),
-        product_id: item.id,
-        size: item.size,
-        color: item.color,
-        captcha_token: captchaToken
+        customer_city:    document.getElementById("customer_city").value.trim(),
+        product_id:       item.id,
+        size:             item.size,
+        color:            item.color,
+        captcha_token:    captchaToken
       };
 
       try {
@@ -171,20 +458,23 @@
           body: JSON.stringify(orderData)
         });
 
-        // Clear cart
         Cart.clear();
 
-        // Open WhatsApp with pre-filled message
         const adminPhone = result.admin_phone;
-        const waMsg = encodeURIComponent(result.whatsapp_message);
-        const waUrl = `https://wa.me/${adminPhone}?text=${waMsg}`;
-        showToast("Order placed! Opening WhatsApp... 🎉", "success");
-        setTimeout(() => { window.open(waUrl, "_blank"); }, 1000);
-        setTimeout(() => { window.location = "/"; }, 2500);
+        const waMsg  = encodeURIComponent(result.whatsapp_message);
+        const waUrl  = `https://wa.me/${adminPhone}?text=${waMsg}`;
+
+        showToast("Order placed! Opening WhatsApp…", "success");
+        setTimeout(() => { window.open(waUrl, "_blank"); }, 800);
+        setTimeout(() => { window.location = "/"; }, 2400);
       } catch(e) {
         showToast(e.message || "Failed to place order", "error");
         btn.disabled = false;
-        btn.textContent = "💬 Order via WhatsApp";
+        btn.innerHTML = `
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+          </svg>
+          Place Order via WhatsApp`;
       }
     }
 
