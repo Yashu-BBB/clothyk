@@ -21,8 +21,8 @@
   /* ─── TEXT ────────────────────── */
   --off-white:   #0A0A0A;          /* main text = near-black */
   --white:       #FFFFFF;
-  --muted:       #6B6B6B;          /* secondary text */
-  --muted-2:     #9B9B9B;          /* tertiary text */
+  --muted:       #3A3A3A;
+  --muted-2:     #6B6B6B;
 
   /* ─── STATUS ──────────────────── */
   --success:     #2E7D4F;

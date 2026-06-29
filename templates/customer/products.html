@@ -36,7 +36,7 @@
 
     /* ─── GENDER TABS ─────────────────────────────────────── */
     .gender-tabs-bar {
-      background: #0A0A0A;
+      background: #FFFFFF;
       border-bottom: 1px solid var(--border);
       position: sticky;
       top: 60px;
@@ -50,31 +50,30 @@
       display: flex;
     }
 
-    .gender-tab {
-      flex: none;
-      padding: 18px 32px;
-      border: none;
-      background: none;
-      font-family: var(--font-body);
-      font-size: 0.75rem;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: #6B6B6B;
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      transition: all 0.2s;
-      position: relative;
-      bottom: -1px;
-    }
+      .gender-tab {
+        flex: none;
+        padding: 18px 32px;
+        border: none;
+        background: none;
+        font-family: var(--font-body);
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #9B9B9B;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+        position: relative;
+        bottom: -1px;
+      }
 
     .gender-tab.active {
-      color: var(--black);
-      border-bottom-color: var(--black);
+      color: #0A0A0A;
+      border-bottom-color: #0A0A0A;
     }
 
-    .gender-tab:hover:not(.active) { color: var(--off-white); }
-
+    .gender-tab:hover:not(.active) { color: #0A0A0A; }
     /* ─── FILTERS ─────────────────────────────────────────── */
     .filters-row {
       display: flex;
