@@ -26,7 +26,7 @@
       position: relative;
       border-radius: var(--radius-lg);
       overflow: hidden;
-      background: var(--black-2);
+      background: #FFFFFF;
     }
 
     .main-img-wrap img {
@@ -50,7 +50,7 @@
       height: 44px;
       background: rgba(10,10,10,0.7);
       backdrop-filter: blur(8px);
-      border: 1px solid var(--border);
+      border: 1px solid #E8E8E8;
       border-radius: 50%;
       cursor: pointer;
       display: flex;
@@ -62,7 +62,7 @@
     .img-wishlist:hover,
     .img-wishlist.active {
       background: rgba(201,169,110,0.15);
-      border-color: var(--gold);
+      border-color: #0A0A0A;
     }
 
     .img-wishlist svg {
@@ -75,8 +75,8 @@
     }
 
     .img-wishlist.active svg {
-      stroke: var(--gold);
-      fill: var(--gold);
+      stroke: #0A0A0A;
+      fill: #0A0A0A;
     }
 
     /* ─── INFO ────────────────────────────────────────────── */
@@ -93,14 +93,14 @@
       margin-bottom: 20px;
     }
     .breadcrumb a { color: var(--muted-2); transition: color 0.2s; }
-    .breadcrumb a:hover { color: var(--gold); }
+    .breadcrumb a:hover { color: #0A0A0A; }
     .breadcrumb-sep { color: var(--border); }
 
     .product-cat-label {
       font-size: 0.7rem;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: var(--gold);
+      color: #0A0A0A;
       font-weight: 500;
       margin-bottom: 10px;
     }
@@ -118,7 +118,7 @@
       font-family: var(--font-display);
       font-size: 2rem;
       font-weight: 700;
-      color: var(--gold);
+      color: #0A0A0A;
       margin-bottom: 8px;
     }
 
@@ -160,7 +160,7 @@
       min-width: 48px;
       padding: 10px 16px;
       border-radius: var(--radius-sm);
-      border: 1px solid var(--border);
+      border: 1px solid #E8E8E8;
       background: transparent;
       cursor: pointer;
       font-family: var(--font-body);
@@ -170,13 +170,13 @@
       text-align: center;
       transition: all 0.2s;
     }
-    .size-chip:hover { border-color: var(--gold); color: var(--gold); }
-    .size-chip.selected { background: var(--gold); border-color: var(--gold); color: var(--black); font-weight: 600; }
+    .size-chip:hover { border-color: #0A0A0A; color: #0A0A0A; }
+    .size-chip.selected { background: var(--gold); border-color: #0A0A0A; color: var(--black); font-weight: 600; }
 
     .color-chip {
       padding: 10px 20px;
       border-radius: var(--radius-sm);
-      border: 1px solid var(--border);
+      border: 1px solid #E8E8E8;
       background: transparent;
       cursor: pointer;
       font-family: var(--font-body);
@@ -185,8 +185,8 @@
       color: var(--muted);
       transition: all 0.2s;
     }
-    .color-chip:hover { border-color: var(--gold); color: var(--gold); }
-    .color-chip.selected { background: var(--gold); border-color: var(--gold); color: var(--black); font-weight: 600; }
+    .color-chip:hover { border-color: #0A0A0A; color: #0A0A0A; }
+    .color-chip.selected { background: var(--gold); border-color: #0A0A0A; color: var(--black); font-weight: 600; }
 
     /* ─── ACTION BUTTONS ──────────────────────────────────── */
     .actions-row {
@@ -204,8 +204,8 @@
     }
 
     .info-tile {
-      background: var(--black-3);
-      border: 1px solid var(--border);
+      background: #F5F5F5;
+      border: 1px solid #E8E8E8;
       border-radius: var(--radius);
       padding: 18px;
       display: flex;
@@ -225,7 +225,7 @@
     .info-tile-icon svg {
       width: 20px;
       height: 20px;
-      stroke: var(--gold);
+      stroke: #0A0A0A;
       fill: none;
       stroke-width: 1.6;
       stroke-linecap: round;
@@ -564,8 +564,8 @@
       const inWishlist = Wishlist.has(productId);
       btn.classList.toggle("active", inWishlist);
       if (svg) {
-        svg.style.fill = inWishlist ? "var(--gold)" : "none";
-        svg.style.stroke = inWishlist ? "var(--gold)" : "var(--muted)";
+        svg.style.fill = inWishlist ? "#0A0A0A" : "none";
+        svg.style.stroke = inWishlist ? "#0A0A0A" : "#6B6B6B";
       }
     }
 

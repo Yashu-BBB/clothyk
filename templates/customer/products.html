@@ -21,7 +21,7 @@
       font-size: 0.7rem;
       letter-spacing: 0.2em;
       text-transform: uppercase;
-      color: var(--gold);
+      color: var(--black);
       font-weight: 500;
       margin-bottom: 10px;
     }
@@ -36,7 +36,7 @@
 
     /* ─── GENDER TABS ─────────────────────────────────────── */
     .gender-tabs-bar {
-      background: var(--black);
+      background: #0A0A0A;
       border-bottom: 1px solid var(--border);
       position: sticky;
       top: 60px;
@@ -60,7 +60,7 @@
       font-weight: 600;
       letter-spacing: 0.12em;
       text-transform: uppercase;
-      color: var(--muted);
+      color: #6B6B6B;
       cursor: pointer;
       border-bottom: 2px solid transparent;
       transition: all 0.2s;
@@ -69,8 +69,8 @@
     }
 
     .gender-tab.active {
-      color: var(--gold);
-      border-bottom-color: var(--gold);
+      color: var(--black);
+      border-bottom-color: var(--black);
     }
 
     .gender-tab:hover:not(.active) { color: var(--off-white); }
@@ -99,25 +99,25 @@
       gap: 6px;
       padding: 8px 18px;
       border-radius: 999px;
-      border: 1px solid var(--border);
+      border: 1px solid #E8E8E8;
       background: transparent;
       cursor: pointer;
       font-size: 0.72rem;
       font-weight: 500;
       letter-spacing: 0.08em;
-      color: var(--muted);
+      color: #6B6B6B;
       white-space: nowrap;
       flex-shrink: 0;
       transition: all 0.2s;
     }
-    .cat-pill:hover { border-color: var(--gold); color: var(--gold); }
-    .cat-pill.active { background: var(--gold); border-color: var(--gold); color: var(--black); }
+    .cat-pill:hover { border-color: var(--black); color: var(--black); }
+    .cat-pill.active { background: #0A0A0A; border-color: #0A0A0A; color: #FFFFFF; }
 
     .sort-select {
-      background: var(--black-3);
-      border: 1px solid var(--border);
+      background: #F5F5F5;
+      border: 1px solid #E8E8E8;
       border-radius: var(--radius-sm);
-      color: var(--muted);
+      color: #6B6B6B;
       font-family: var(--font-body);
       font-size: 0.75rem;
       letter-spacing: 0.08em;
@@ -131,7 +131,7 @@
       transition: border-color 0.2s;
       flex-shrink: 0;
     }
-    .sort-select:focus { border-color: var(--gold); }
+    .sort-select:focus { border-color: var(--black); }
 
     /* ─── RESULTS BAR ─────────────────────────────────────── */
     .results-bar {
@@ -141,11 +141,11 @@
       padding: 12px 0 24px;
       border-top: 1px solid var(--border);
       font-size: 0.78rem;
-      color: var(--muted);
+      color: #6B6B6B;
       letter-spacing: 0.06em;
     }
 
-    .empty-state { text-align: center; padding: 80px 24px; color: var(--muted); grid-column: 1/-1; }
+    .empty-state { text-align: center; padding: 80px 24px; color: #6B6B6B; grid-column: 1/-1; }
 
     @media (max-width: 768px) {
       .shop-header { padding: 36px 0 28px; }
