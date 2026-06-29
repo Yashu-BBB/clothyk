@@ -10,29 +10,41 @@
     /* ─── HERO ───────────────────────────────────────────────── */
     .hero {
       position: relative;
-      min-height: 92vh;
+      height: 100vh;
+      min-height: 600px;
       display: flex;
       align-items: flex-end;
       overflow: hidden;
-      background: #F5F5F5;
+
+      /* Full-bleed photo background */
+      background-image: url('https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=1200&auto=format&fit=crop&q=80');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-attachment: fixed; /* parallax on desktop */
     }
 
-    /* Subtle editorial grid texture */
-    .hero-bg {
-      position: absolute;
-      inset: 0;
-      background:
-        linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.7) 100%),
-        #F0F0F0;
-    }
-    .hero-bg::before {
+    /* Dark overlay so text stays legible */
+    .hero::before {
       content: '';
       position: absolute;
       inset: 0;
-      background-image:
-        linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
-      background-size: 60px 60px;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 1;
+    }
+
+    /* Extra bottom-gradient for text contrast */
+    .hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        to top,
+        rgba(0, 0, 0, 0.55) 0%,
+        rgba(0, 0, 0, 0.10) 50%,
+        transparent 100%
+      );
+      z-index: 1;
     }
 
     .hero-content {
@@ -51,7 +63,7 @@
       font-size: 0.7rem;
       letter-spacing: 0.25em;
       text-transform: uppercase;
-      color: #6B6B6B;
+      color: rgba(255, 255, 255, 0.75);
       margin-bottom: 20px;
     }
 
@@ -59,7 +71,7 @@
       content: '';
       width: 32px;
       height: 1px;
-      background: #0A0A0A;
+      background: rgba(255, 255, 255, 0.75);
     }
 
     .hero-title {
@@ -67,19 +79,19 @@
       font-size: clamp(3rem, 8vw, 6.5rem);
       font-weight: 900;
       line-height: 0.95;
-      color: #0A0A0A;
+      color: #FFFFFF;
       margin-bottom: 28px;
       letter-spacing: -0.02em;
     }
 
     .hero-title em {
       font-style: italic;
-      color: #0A0A0A;
+      color: #FFFFFF;
     }
 
     .hero-sub {
       font-size: 0.92rem;
-      color: #6B6B6B;
+      color: rgba(255, 255, 255, 0.80);
       max-width: 420px;
       line-height: 1.7;
       margin-bottom: 40px;
@@ -90,6 +102,56 @@
       gap: 16px;
       flex-wrap: wrap;
       align-items: center;
+    }
+
+    /* SHOP GIRLS — white bg, black text */
+    .hero-btn-girls {
+      background: #FFFFFF;
+      color: #0A0A0A;
+      border: none;
+      padding: 16px 32px;
+      border-radius: 4px;
+      font-family: var(--font-body);
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.22s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .hero-btn-girls:hover {
+      background: #F0F0F0;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    }
+
+    /* SHOP BOYS — transparent, white border & text */
+    .hero-btn-boys {
+      background: transparent;
+      color: #FFFFFF;
+      border: 1px solid rgba(255, 255, 255, 0.85);
+      padding: 16px 32px;
+      border-radius: 4px;
+      font-family: var(--font-body);
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.22s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .hero-btn-boys:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: #FFFFFF;
+      transform: translateY(-1px);
     }
 
     .hero-stats {
@@ -107,7 +169,7 @@
       font-family: var(--font-display);
       font-size: 2rem;
       font-weight: 700;
-      color: #0A0A0A;
+      color: #FFFFFF;
       line-height: 1;
     }
 
@@ -115,7 +177,24 @@
       font-size: 0.65rem;
       letter-spacing: 0.15em;
       text-transform: uppercase;
-      color: #6B6B6B;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    /* Photo credit — bottom right, subtle */
+    .hero-credit {
+      position: absolute;
+      bottom: 16px;
+      right: 20px;
+      z-index: 2;
+      font-size: 0.62rem;
+      color: rgba(255, 255, 255, 0.5);
+      letter-spacing: 0.06em;
+      font-family: var(--font-body);
+    }
+    .hero-credit a {
+      color: inherit;
+      text-decoration: underline;
+      text-underline-offset: 2px;
     }
 
     /* ─── TRUST STRIP ────────────────────────────────────────── */
