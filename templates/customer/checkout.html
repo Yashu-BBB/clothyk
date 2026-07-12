@@ -335,6 +335,16 @@
           <div class="form-error" id="err-city"></div>
         </div>
 
+        <div class="form-group">
+          <label class="form-label">Pincode *</label>
+          <input class="form-control" id="customer_pincode"
+            placeholder="6-digit pincode"
+            maxlength="6"
+            inputmode="numeric"
+            autocomplete="postal-code">
+          <div class="form-error" id="err-pincode"></div>
+        </div>
+
         <!-- Turnstile CAPTCHA -->
         <div class="captcha-wrap">
           <div class="cf-turnstile" data-sitekey="0x4AAAAAADrUAQmH1f5HqXtJ" id="turnstile-widget"></div>
@@ -425,6 +435,12 @@
         document.getElementById("err-city").textContent = "City is required";
         ok = false;
       }
+      const pincode = document.getElementById("customer_pincode").value.trim();
+      if (!/^[1-9][0-9]{5}$/.test(pincode)) {
+        document.getElementById("customer_pincode").classList.add("error");
+        document.getElementById("err-pincode").textContent = "Enter a valid 6-digit Indian pincode";
+        ok = false;
+      }
       return ok;
     }
 
@@ -446,6 +462,7 @@
         customer_phone:   document.getElementById("customer_phone").value.trim(),
         customer_address: document.getElementById("customer_address").value.trim(),
         customer_city:    document.getElementById("customer_city").value.trim(),
+        customer_pincode: document.getElementById("customer_pincode").value.trim(),
         product_id:       item.id,
         size:             item.size,
         color:            item.color,

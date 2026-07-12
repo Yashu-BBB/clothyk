@@ -20,6 +20,7 @@ class OrderRequest(BaseModel):
     customer_phone: str
     customer_address: str
     customer_city: str
+    customer_pincode: str
     product_id: str
     size: str
     color: str
@@ -61,6 +62,7 @@ async def create_order(order: OrderRequest, request: Request):
             "customer_phone": order.customer_phone,
             "customer_address": order.customer_address,
             "customer_city": order.customer_city,
+            "customer_pincode": order.customer_pincode,
             "product_id": order.product_id,
             "product_name": prod["name"],
             "size": order.size,
@@ -99,7 +101,8 @@ async def create_order(order: OrderRequest, request: Request):
             f"Name: {order.customer_name}\n"
             f"Phone: {order.customer_phone}\n"
             f"Address: {order.customer_address}\n"
-            f"City: {order.customer_city}"
+            f"City: {order.customer_city}\n"
+        f"Pincode: {order.customer_pincode}"
         )
     }
 

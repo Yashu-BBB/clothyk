@@ -58,7 +58,7 @@
         <table>
           <thead>
             <tr>
-              <th>Image</th><th>Name</th><th>Gender</th><th>Category</th><th>Our Price</th><th>SK Price</th>
+              <th>Image</th><th>Name</th><th>Gender</th><th>Category</th><th>MRP</th><th>Our Price</th><th>Discount</th><th>SK Price</th>
               <th>Profit</th><th>Stock</th><th>Code</th><th>Actions</th>
             </tr>
           </thead>
@@ -126,6 +126,12 @@
           <label class="form-label">Shopkeeper Price (₹) *</label>
           <input class="form-control" name="shopkeeper_price" type="number" min="1" step="0.01" required placeholder="e.g. 850">
         </div>
+      </div>
+      <!-- MRP / Discount -->
+      <div class="form-group">
+        <label class="form-label">MRP / Original Price (₹) <span style="color:var(--muted);font-weight:400;font-size:0.82rem">— optional, shows strikethrough discount</span></label>
+        <input class="form-control" name="mrp" type="number" min="1" step="0.01" id="mrp-input" placeholder="e.g. 1999 (leave empty for no discount)">
+        <div id="discount-preview" style="margin-top:6px;font-size:0.82rem;color:#2E7D4F;display:none"></div>
       </div>
 
       <!-- Sizes -->
@@ -285,11 +291,35 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+  // Discount preview listeners
+  document.getElementById('mrp-input')?.addEventListener('input', updateDiscountPreview);
+  document.querySelector('[name=our_price]')?.addEventListener('input', updateDiscountPreview);
+
   // Init gender UI
+  document.getElementById('mrp-input').value = '';
+  document.getElementById('discount-preview').style.display = 'none';
   selectGender('Girls');
   // Init size preset
   loadSizePreset('standard', document.querySelector('.size-type-tab'));
 });
+
+// ─── DISCOUNT PREVIEW ────────────────────────────────────────────────────────
+function updateDiscountPreview() {
+  const ourPrice = parseFloat(document.querySelector('[name=our_price]').value) || 0;
+  const mrp = parseFloat(document.getElementById('mrp-input').value) || 0;
+  const preview = document.getElementById('discount-preview');
+  if (mrp > ourPrice && ourPrice > 0) {
+    const pct = Math.round((1 - ourPrice / mrp) * 100);
+    preview.style.display = 'block';
+    preview.textContent = `✅ ${pct}% discount — customer sees ₹${mrp.toFixed(0)} scratched, ₹${ourPrice.toFixed(0)} highlighted`;
+  } else if (mrp > 0 && mrp <= ourPrice) {
+    preview.style.display = 'block';
+    preview.style.color = '#C0392B';
+    preview.textContent = '⚠️ MRP must be higher than Our Price for discount to show';
+  } else {
+    preview.style.display = 'none';
+  }
+}
 
 // ─── GENDER ────────────────────────────────────────────────────────────────
 function selectGender(gender) {
@@ -335,7 +365,9 @@ async function loadProducts() {
         <td><strong>${p.name}</strong></td>
         <td><span class="badge badge-${p.gender === 'Girls' ? 'primary' : 'warning'}">${p.gender || '—'}</span></td>
         <td>${p.category || '—'}</td>
+        <td style="color:var(--muted);text-decoration:line-through">${p.mrp ? formatPrice(p.mrp) : '—'}</td>
         <td><strong>${formatPrice(p.our_price)}</strong></td>
+        <td>${p.mrp && p.mrp > p.our_price ? `<span class="badge badge-danger">-${Math.round((1 - p.our_price/p.mrp)*100)}%</span>` : '—'}</td>
         <td style="color:var(--muted)">${formatPrice(p.shopkeeper_price)}</td>
         <td style="color:var(--success);font-weight:700">+${formatPrice(p.our_price - p.shopkeeper_price)}</td>
         <td><span class="badge badge-${p.stock > 2 ? 'success' : p.stock > 0 ? 'warning' : 'danger'}">${p.stock}</span></td>

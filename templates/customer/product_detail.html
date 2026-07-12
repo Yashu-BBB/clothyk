@@ -471,7 +471,23 @@
         document.getElementById("product-img").src = product.image || "/static/images/placeholder.svg";
         document.getElementById("product-img").alt = product.name;
         document.getElementById("product-name").textContent = product.name;
-        document.getElementById("product-price").textContent = formatPrice(product.our_price);
+        // Price with discount
+        const hasDis = product.mrp && product.mrp > product.our_price;
+        const disPct = hasDis ? Math.round((1 - product.our_price / product.mrp) * 100) : 0;
+        const priceEl = document.getElementById("product-price");
+        if (hasDis) {
+          priceEl.innerHTML = `
+            <div class="detail-price-wrap">
+              <span class="detail-price-current">${formatPrice(product.our_price)}</span>
+              <span class="detail-price-mrp">${formatPrice(product.mrp)}</span>
+              <span class="detail-price-badge">-${disPct}% OFF</span>
+            </div>
+            <div style="font-size:0.78rem;color:#2E7D4F;margin-top:2px">
+              You save ${formatPrice(product.mrp - product.our_price)}
+            </div>`;
+        } else {
+          priceEl.innerHTML = `<span class="detail-price-current">${formatPrice(product.our_price)}</span>`;
+        }
         document.getElementById("product-code").textContent = `Ref: ${product.shopkeeper_code}`;
         document.getElementById("product-desc").textContent = product.description || "";
 

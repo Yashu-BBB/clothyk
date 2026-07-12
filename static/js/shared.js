@@ -127,10 +127,22 @@ function formatPrice(n) { return "₹" + Number(n).toLocaleString("en-IN"); }
 // ─── Product Card ─────────────────────────────────────────────────────────
 function renderProductCard(p) {
   const wishlisted = Wishlist.has(p.id);
+  // Discount logic
+  const hasDiscount = p.mrp && p.mrp > p.our_price;
+  const discountPct = hasDiscount ? Math.round((1 - p.our_price / p.mrp) * 100) : 0;
+  const priceHtml = hasDiscount
+    ? `<div class="product-card-price">
+        <span class="price-current">${formatPrice(p.our_price)}</span>
+        <span class="price-mrp">${formatPrice(p.mrp)}</span>
+        <span class="price-badge">-${discountPct}%</span>
+       </div>`
+    : `<div class="product-card-price">${formatPrice(p.our_price)}</div>`;
+
   return `
     <div class="product-card" onclick="window.location='/product/${p.id}'">
       <div class="product-img-wrap">
         <img src="${p.image || '/static/images/placeholder.svg'}" alt="${p.name}" loading="lazy">
+        ${hasDiscount ? `<div class="discount-badge">-${discountPct}%</div>` : ''}
         <div class="product-card-overlay">
           <span class="btn btn-primary btn-sm" style="pointer-events:none">View Details</span>
         </div>
@@ -143,7 +155,7 @@ function renderProductCard(p) {
       <div class="product-card-body">
         ${p.category ? `<div class="product-card-category">${p.category}</div>` : ''}
         <div class="product-card-name">${p.name}</div>
-        <div class="product-card-price">${formatPrice(p.our_price)}</div>
+        ${priceHtml}
       </div>
     </div>
   `;

@@ -799,3 +799,67 @@ footer {
   .product-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .product-card-name { font-size: 0.85rem; }
 }
+/* ─── DISCOUNT / MRP PRICING ──────────────────────────────────────────── */
+.price-current {
+  font-weight: 700;
+  color: var(--black);
+  font-size: 1rem;
+}
+.price-mrp {
+  font-size: 0.82rem;
+  color: var(--muted-2);
+  text-decoration: line-through;
+  margin-left: 6px;
+}
+.price-badge {
+  display: inline-block;
+  background: #C0392B;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-left: 6px;
+  letter-spacing: 0.04em;
+}
+.discount-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: #C0392B;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  z-index: 2;
+}
+/* Product detail discount */
+.detail-price-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.detail-price-current {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--black);
+}
+.detail-price-mrp {
+  font-size: 1rem;
+  color: var(--muted-2);
+  text-decoration: line-through;
+}
+.detail-price-badge {
+  background: #C0392B;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}

@@ -12,7 +12,7 @@ from utils.auth_utils import require_admin
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-SAFE_FIELDS = "id,name,description,our_price,sizes,colors,image,category,gender,featured,stock,shopkeeper_code,view_count,created_at"
+SAFE_FIELDS = "id,name,description,our_price,mrp,sizes,colors,image,category,gender,featured,stock,shopkeeper_code,view_count,created_at"
 
 
 # ─── PUBLIC ENDPOINTS ─────────────────────────────────────────────────────
@@ -142,6 +142,7 @@ async def add_product(
     gender: str = Form("Girls"),
     featured: bool = Form(False),
     stock: int = Form(1),
+    mrp: float = Form(None),
     shopkeeper_id: int = Form(...),
     image: Optional[UploadFile] = File(None),
     admin=Depends(require_admin)
@@ -169,6 +170,7 @@ async def add_product(
             "colors": json.loads(colors) if isinstance(colors, str) else colors,
             "category": category,
             "gender": gender,
+            "mrp": mrp if mrp else None,
             "featured": featured,
             "stock": stock,
             "shopkeeper_id": shopkeeper_id,
@@ -199,6 +201,7 @@ async def edit_product(
     gender: str = Form(None),
     featured: bool = Form(None),
     stock: int = Form(None),
+    mrp: float = Form(None),
     shopkeeper_id: int = Form(None),
     image: Optional[UploadFile] = File(None),
     admin=Depends(require_admin)
@@ -213,6 +216,7 @@ async def edit_product(
         if colors is not None: updates["colors"] = json.loads(colors)
         if category is not None: updates["category"] = category
         if gender is not None: updates["gender"] = gender
+        if mrp is not None: updates["mrp"] = mrp if mrp > 0 else None
         if featured is not None: updates["featured"] = featured
         if stock is not None: updates["stock"] = stock
         if shopkeeper_id is not None:
