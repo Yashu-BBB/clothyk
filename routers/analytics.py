@@ -30,8 +30,17 @@ def start_of_last_month():
 @router.get("/overview")
 async def analytics_overview(admin=Depends(require_admin)):
     try:
-        # All time
-        orders = supabase_admin.table("orders").select("*").execute().data or []
+        # All time - paginate to avoid memory issues at scale
+        all_orders = []
+        page = 0
+        page_size = 1000
+        while True:
+            batch = supabase_admin.table("orders").select("*").range(page * page_size, (page + 1) * page_size - 1).execute().data or []
+            all_orders.extend(batch)
+            if len(batch) < page_size:
+                break
+            page += 1
+        orders = all_orders
         active = [o for o in orders if o["status"] not in ("cancelled","refunded")]
         total_revenue = sum(o["our_price"] for o in active)
         total_cost = sum(o["shopkeeper_price"] for o in active)

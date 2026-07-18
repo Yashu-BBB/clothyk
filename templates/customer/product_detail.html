@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title id="page-title">Product — Clothyk</title>
   <meta name="description" id="page-desc" content="">
@@ -114,6 +115,34 @@
       margin-bottom: 16px;
     }
 
+    /* Discount price display inside product-price */
+    .product-price .detail-price-wrap {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 4px;
+    }
+    .product-price .detail-price-current {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #0A0A0A;
+      font-family: var(--font-display, 'Playfair Display', serif);
+    }
+    .product-price .detail-price-mrp {
+      font-size: 1rem;
+      color: #6B6B6B;
+      text-decoration: line-through;
+    }
+    .product-price .detail-price-badge {
+      background: #C0392B;
+      color: #fff;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 4px;
+      letter-spacing: 0.04em;
+    }
     .product-price {
       font-family: var(--font-display);
       font-size: 2rem;
@@ -121,10 +150,7 @@
       color: #0A0A0A;
       margin-bottom: 8px;
     }
-    .product-price .detail-price-current { font-size: 2rem; font-weight: 700; }
-    .product-price .detail-price-mrp { font-size: 1rem; color: #6B6B6B; text-decoration: line-through; }
-    .product-price .detail-price-badge { background: #C0392B; color: #fff; font-size: 0.78rem; padding: 3px 10px; border-radius: 4px; }
-    .product-price .detail-price-wrap { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+
     .product-code {
       font-size: 0.75rem;
       letter-spacing: 0.1em;

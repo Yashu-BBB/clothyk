@@ -71,6 +71,7 @@ async def create_order(order: OrderRequest, request: Request):
             "shopkeeper_price": prod["shopkeeper_price"],
             "shopkeeper_id": prod["shopkeeper_id"],
             "shopkeeper_code": prod["shopkeeper_code"],
+            "payment_type": "upi",
             "agent_state": {}
         }
         res = supabase_admin.table("orders").insert(order_data).execute()

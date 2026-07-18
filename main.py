@@ -50,11 +50,18 @@ app = FastAPI(title="Clothyk", lifespan=lifespan, docs_url=None, redoc_url=None)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+ALLOWED_ORIGINS = [
+    "https://clothyk.up.railway.app",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
+    allow_credentials=True,
 )
 
 # ─── Middleware: Visitor Tracking + Bot Protection ─────────────────────────
@@ -72,9 +79,11 @@ async def track_and_protect(request: Request, call_next):
             if client_ip in failed_attempts:
                 del failed_attempts[client_ip]
 
-    # Log visitors (only for page routes, not static/api)
+    # Log visitors (only customer pages, not static/api/admin)
     path = request.url.path
-    if not path.startswith("/static") and not path.startswith("/api"):
+    if (not path.startswith("/static")
+            and not path.startswith("/api")
+            and not path.startswith("/admin")):
         try:
             supabase_admin.table("visitors").insert({
                 "page": path,
