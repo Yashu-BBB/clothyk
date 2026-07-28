@@ -1,6 +1,5 @@
 import logging
 import os
-import json
 from fastapi import APIRouter, Request, HTTPException
 from utils.db import supabase_admin
 from utils.whatsapp_utils import (
@@ -15,7 +14,9 @@ from utils.whatsapp_utils import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-ULTRAMSG_TOKEN = os.getenv("ULTRAMSG_TOKEN", "")
+# Shared secret the WPPConnect server sends back with each webhook call,
+# so we can verify it's really our own server forwarding the message.
+WPP_API_KEY = os.getenv("WPP_API_KEY", "")
 
 
 def normalize_phone(phone: str) -> str:
@@ -56,49 +57,70 @@ async def set_agent_state(order_id: str, state: dict):
 
 @router.post("/webhook")
 async def whatsapp_webhook(request: Request):
-    """UltraMsg sends POST webhooks for incoming messages."""
+    """
+    WPPConnect server forwards incoming WhatsApp events here.
+
+    Expected payload shape:
+    {
+      "event": "onmessage",
+      "session": "clothyk",
+      "data": {
+        "id": "message_id",
+        "from": "917975735906@c.us",
+        "to": "916362341792@c.us",
+        "body": "1",                      # text, or base64 for media
+        "type": "chat" | "image" | ...,
+        "isMedia": false,
+        "mimetype": null,
+        "caption": null,
+        "timestamp": 1234567890
+      }
+    }
+    """
+    # Optional shared-secret check (WPPConnect server can send this as a header)
+    if WPP_API_KEY:
+        incoming_key = request.headers.get("x-api-key", "")
+        if incoming_key and incoming_key != WPP_API_KEY:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+
     try:
-        content_type = request.headers.get("content-type", "")
-        if "application/json" in content_type:
-            body = await request.json()
-        else:
-            form = await request.form()
-            import json as _json
-            data_raw = form.get("data", "{}")
-            try:
-                body = {"data": _json.loads(data_raw)}
-            except Exception:
-                body = {"data": {}}
+        body = await request.json()
         logger.info(f"Webhook received: {str(body)[:200]}")
     except Exception as e:
         logger.error(f"Webhook parse error: {e}")
         return {"status": "ok"}
 
-    # UltraMsg webhook structure
-    msg_data = body.get("data", {})
+    event = body.get("event", "")
+    msg_data = body.get("data", {}) or {}
+
+    # Only handle incoming message events; ignore status/ack/etc. events
+    if event and event != "onmessage":
+        return {"status": "ok"}
+
     msg_type = msg_data.get("type", "")
     raw_from = msg_data.get("from", "")
-    body_text = (msg_data.get("body", "") or "").strip().upper()
-    is_image = msg_type == "image"
+    is_image = bool(msg_data.get("isMedia")) or msg_type == "image"
+    body_text = ("" if is_image else (msg_data.get("body", "") or "")).strip().upper()
 
     if not raw_from:
         return {"status": "ok"}
-
-    # Normalize phone (remove @c.us or @g.us suffix)
-    phone_raw = raw_from.split("@")[0]
-    phone = normalize_phone(phone_raw)
-    full_phone = f"+91{phone}" if not phone_raw.startswith("91") else f"+{phone_raw.split('@')[0]}"
-
-    logger.info(f"WhatsApp incoming from {phone}: type={msg_type}, body={body_text[:50]}")
 
     # Ignore group messages
     if "@g.us" in raw_from:
         return {"status": "ok"}
 
+    # Normalize phone (strip @c.us suffix)
+    phone_raw = raw_from.split("@")[0]
+    phone = normalize_phone(phone_raw)
+    full_phone = f"+91{phone}" if not phone_raw.startswith("91") else f"+{phone_raw}"
+
+    logger.info(f"WhatsApp incoming from {phone}: type={msg_type}, body={body_text[:50]}")
+
     order = await get_latest_order(phone)
     agent_state = await get_agent_state(order["id"]) if order else {}
 
     # ─── Command routing ────────────────────────────────────────────────
+    # (Everything below this line is unchanged from the original agent logic.)
 
     # TRACK command
     if body_text == "TRACK":

@@ -7,41 +7,65 @@ import base64
 
 logger = logging.getLogger(__name__)
 
-INSTANCE = os.getenv("ULTRAMSG_INSTANCE", "")
-TOKEN = os.getenv("ULTRAMSG_TOKEN", "")
 WA_NUMBER = os.getenv("WHATSAPP_NUMBER", "")
 UPI_ID = os.getenv("UPI_ID", "")
 UPI_NAME = os.getenv("UPI_NAME", "Clothyk")
 
-BASE_URL = f"https://api.ultramsg.com/{INSTANCE}"
+# ─── WPPConnect server config (replaces UltraMsg) ──────────────────────────
+WPP_SERVER_URL = os.getenv("WPP_SERVER_URL", "").rstrip("/")
+WPP_API_KEY = os.getenv("WPP_API_KEY", "")
+WPP_SESSION = os.getenv("WPP_SESSION", "clothyk")
 
 
-def _send(endpoint: str, payload: dict) -> bool:
+def _headers() -> dict:
+    return {
+        "Content-Type": "application/json",
+        "x-api-key": WPP_API_KEY,
+    }
+
+
+def _to_wpp_number(to: str) -> str:
+    """WPPConnect expects a bare number (no '+'), e.g. 917975735906."""
+    return to.lstrip("+")
+
+
+def _post(endpoint: str, payload: dict, timeout: int = 15) -> bool:
     try:
-        payload["token"] = TOKEN
-        r = requests.post(f"{BASE_URL}/{endpoint}", data=payload, timeout=10)
+        r = requests.post(
+            f"{WPP_SERVER_URL}/{endpoint}",
+            json=payload,
+            headers=_headers(),
+            timeout=timeout,
+        )
         r.raise_for_status()
         logger.info(f"WhatsApp message sent: {endpoint} to {payload.get('to')}")
         return True
     except Exception as e:
-        logger.error(f"WhatsApp API failed: {e}")
+        logger.error(f"WPPConnect API failed ({endpoint}): {e}")
         return False
 
 
 def send_text(to: str, message: str) -> bool:
-    if not to.startswith("+"):
-        to = f"+{to}"
-    return _send("messages/chat", {"to": to, "body": message})
+    payload = {
+        "session": WPP_SESSION,
+        "to": _to_wpp_number(to),
+        "message": message,
+    }
+    return _post("send-text", payload)
 
 
 def send_image_url(to: str, image_url: str, caption: str = "") -> bool:
-    if not to.startswith("+"):
-        to = f"+{to}"
-    return _send("messages/image", {"to": to, "image": image_url, "caption": caption})
+    payload = {
+        "session": WPP_SESSION,
+        "to": _to_wpp_number(to),
+        "image": image_url,
+        "caption": caption,
+    }
+    return _post("send-image", payload)
 
 
 def generate_upi_qr(order_id: str, amount: float) -> bytes:
-    """Generate UPI QR code and return image bytes."""
+    """Generate UPI QR code and return image bytes. (unchanged)"""
     upi_url = f"upi://pay?pa={UPI_ID}&pn={UPI_NAME}&am={amount}&cu=INR&tn=Order{order_id}"
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
     qr.add_data(upi_url)
@@ -54,28 +78,26 @@ def generate_upi_qr(order_id: str, amount: float) -> bytes:
 
 
 def send_upi_qr(to: str, order_id: str, amount: float) -> bool:
-    """Send UPI QR code via UltraMsg as base64 image."""
+    """Generate UPI QR → base64 → send via WPPConnect server."""
     try:
         qr_bytes = generate_upi_qr(order_id, amount)
         b64 = base64.b64encode(qr_bytes).decode()
-        if not to.startswith("+"):
-            to = f"+{to}"
         payload = {
-            "token": TOKEN,
-            "to": to,
+            "session": WPP_SESSION,
+            "to": _to_wpp_number(to),
             "image": f"data:image/png;base64,{b64}",
-            "caption": f"Scan to pay ₹{amount:.0f} for Order #{order_id}"
+            "caption": f"Scan to pay ₹{amount:.0f} for Order #{order_id}",
         }
-        r = requests.post(f"{BASE_URL}/messages/image", data=payload, timeout=15)
-        r.raise_for_status()
-        logger.info(f"UPI QR sent to {to} for order {order_id}")
-        return True
+        ok = _post("send-image", payload)
+        if ok:
+            logger.info(f"UPI QR sent to {to} for order {order_id}")
+        return ok
     except Exception as e:
         logger.error(f"QR code send failed: {e}")
         return False
 
 
-# ─── Message Templates ─────────────────────────────────────────────────────
+# ─── Message Templates (unchanged) ─────────────────────────────────────────
 
 def msg_order_received(name: str, product: str, size: str, color: str, amount: float) -> str:
     return (
