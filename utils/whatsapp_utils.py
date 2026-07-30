@@ -29,12 +29,20 @@ def _to_wpp_number(to: str) -> str:
     WPPConnect accepts either a bare number (e.g. 917975735906, which it
     appends @c.us to) or a full JID we already have (e.g. "...@c.us" or
     "...@lid" — the latter shows up now that WhatsApp obfuscates some
-    numbers as Linked IDs). Pass full JIDs through unchanged; only strip
-    a leading '+' for bare numbers.
+    numbers as Linked IDs). Pass full JIDs through unchanged.
+
+    Callers sometimes pass the raw customer_phone straight from Supabase
+    (e.g. routers/orders.py sends admin-triggered notifications this way),
+    which is stored as a bare 10-digit Indian number with no country code.
+    Add the +91 country code in that case so WPPConnect targets the right
+    WhatsApp ID instead of an invalid/wrong one.
     """
     if "@" in to:
         return to
-    return to.lstrip("+")
+    digits = to.lstrip("+")
+    if len(digits) == 10:  # bare Indian mobile number, no country code yet
+        digits = "91" + digits
+    return digits
 
 
 def _post(endpoint: str, payload: dict, timeout: int = 15) -> bool:
