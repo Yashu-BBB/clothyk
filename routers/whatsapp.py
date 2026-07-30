@@ -109,10 +109,35 @@ async def whatsapp_webhook(request: Request):
     if "@g.us" in raw_from:
         return {"status": "ok"}
 
-    # Normalize phone (strip @c.us suffix)
+    # Ignore protocol/system events that aren't actual customer messages
+    # (e2e_notification, ciphertext, revoked, etc. arrive as WhatsApp's
+    # encryption handshake noise around every real message)
+    ACTIONABLE_TYPES = {"chat", "image", "document", "video", "ptt", "audio"}
+    if msg_type not in ACTIONABLE_TYPES and not is_image:
+        return {"status": "ok"}
+
+    # WhatsApp is rolling out @lid (Linked ID) identifiers that replace the
+    # real phone number for privacy — raw_from may be "<opaque-id>@lid"
+    # instead of "<phone>@c.us". The WPPConnect server attempts to resolve
+    # this via getPnLidEntry and, if successful, includes the real number
+    # in msg_data["pn"]. Reply target is always the exact JID WhatsApp gave
+    # us; order lookups use the resolved phone number when available.
+    is_lid = raw_from.endswith("@lid")
+    resolved_pn = (msg_data.get("pn") or "").strip()
     phone_raw = raw_from.split("@")[0]
-    phone = normalize_phone(phone_raw)
-    full_phone = f"+91{phone}" if not phone_raw.startswith("91") else f"+{phone_raw}"
+    full_phone = raw_from  # reply target: exact JID WhatsApp gave us
+
+    if is_lid and resolved_pn:
+        phone = normalize_phone(resolved_pn)
+        logger.info(f"Resolved @lid {raw_from} -> phone {phone} via WPPConnect")
+    elif is_lid:
+        phone = phone_raw
+        logger.warning(
+            f"Incoming message uses @lid with no resolvable phone number: {raw_from}. "
+            f"Order lookup by phone will likely miss."
+        )
+    else:
+        phone = normalize_phone(phone_raw)
 
     logger.info(f"WhatsApp incoming from {phone}: type={msg_type}, body={body_text[:50]}")
 
@@ -161,8 +186,11 @@ async def whatsapp_webhook(request: Request):
             send_text(full_phone, msg_cancel_confirm(order["product_name"], order["our_price"]))
         return {"status": "ok"}
 
-    # HELP or unknown
-    if body_text in ("HELP", "HI", "HELLO", "START"):
+    # HELP is an explicit override command that always works.
+    # HI/HELLO/START are NOT intercepted here — they fall through so that a
+    # customer with a fresh pending order gets the payment prompt instead of
+    # being stuck on the generic menu (see fallback at the bottom).
+    if body_text == "HELP":
         send_text(full_phone, msg_help())
         return {"status": "ok"}
 

@@ -25,7 +25,15 @@ def _headers() -> dict:
 
 
 def _to_wpp_number(to: str) -> str:
-    """WPPConnect expects a bare number (no '+'), e.g. 917975735906."""
+    """
+    WPPConnect accepts either a bare number (e.g. 917975735906, which it
+    appends @c.us to) or a full JID we already have (e.g. "...@c.us" or
+    "...@lid" — the latter shows up now that WhatsApp obfuscates some
+    numbers as Linked IDs). Pass full JIDs through unchanged; only strip
+    a leading '+' for bare numbers.
+    """
+    if "@" in to:
+        return to
     return to.lstrip("+")
 
 
