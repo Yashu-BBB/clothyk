@@ -7,6 +7,7 @@ from utils.db import supabase_admin
 from utils.auth_utils import require_admin
 from utils.captcha import verify_turnstile
 from utils.whatsapp_utils import send_text, send_upi_qr, msg_order_received, msg_shipped, msg_refund_processed
+from utils.nimbuspost import create_shipment
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -33,6 +34,73 @@ class StatusUpdate(BaseModel):
     courier_name: str | None = None
     payment_status: str | None = None
     refund_status: str | None = None
+
+
+# ─── NimbusPost auto-ship helpers ──────────────────────────────────────────
+
+def _is_auto_ship_enabled() -> bool:
+    """Reads the nimbuspost_auto_mode toggle from the settings table."""
+    try:
+        res = supabase_admin.table("settings").select("value").eq("key", "nimbuspost_auto_mode").maybe_single().execute()
+        return bool(res.data and res.data.get("value") == "true")
+    except Exception as e:
+        logger.warning(f"Could not read nimbuspost_auto_mode setting, defaulting to manual: {e}")
+        return False
+
+
+def create_shipment_for_order(order: dict) -> dict | None:
+    """
+    Fetches the order's shopkeeper and calls NimbusPost to create a
+    shipment, then persists the returned AWB/courier/label on the order
+    and notifies the customer via WhatsApp.
+
+    Shared between the auto-ship flow here and the manual "Create Shipment"
+    admin endpoint in routers/admin.py. Returns the NimbusPost result dict
+    on success, or None on failure (never raises — shipment failures must
+    never block the rest of the order flow).
+    """
+    try:
+        if order.get("nimbuspost_awb"):
+            logger.info(f"Order {order['id']} already has a NimbusPost shipment — skipping")
+            return None
+
+        shopkeeper_id = order.get("shopkeeper_id")
+        if not shopkeeper_id:
+            logger.warning(f"Order {order['id']} has no shopkeeper_id — cannot create shipment")
+            return None
+
+        sk_res = supabase_admin.table("shopkeepers").select("*").eq("id", shopkeeper_id).single().execute()
+        shopkeeper = sk_res.data
+        if not shopkeeper or not shopkeeper.get("address"):
+            logger.warning(f"Shopkeeper {shopkeeper_id} has no registered address — cannot create shipment for order {order['id']}")
+            return None
+
+        result = create_shipment(order, shopkeeper)
+        if not result:
+            supabase_admin.table("orders").update({"shipping_status": "failed"}).eq("id", order["id"]).execute()
+            return None
+
+        supabase_admin.table("orders").update({
+            "nimbuspost_awb": result["awb"],
+            "tracking_id": result["awb"],
+            "courier_name": result["courier_name"],
+            "label_url": result["label_url"],
+            "nimbuspost_shipment_id": result["shipment_id"],
+            "shipping_status": "created",
+            "status": "shipped",
+        }).eq("id", order["id"]).execute()
+
+        logger.info(f"NimbusPost shipment created for order {order['id']}: AWB {result['awb']}")
+
+        tracking_url = f"https://www.nimbuspost.com/track/{result['awb']}"
+        send_text(order["customer_phone"], msg_shipped(
+            order["product_name"], result["courier_name"] or "Courier", result["awb"], tracking_url
+        ))
+
+        return result
+    except Exception as e:
+        logger.error(f"create_shipment_for_order failed for order {order.get('id')}: {e}")
+        return None
 
 
 @router.post("/create")
@@ -165,6 +233,15 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
 
         if update.refund_status == "processed":
             send_text(phone, msg_refund_processed(order["our_price"]))
+
+        # NimbusPost auto-ship: only fires when payment is verified on a
+        # confirmed order and the auto-mode setting is turned on. In manual
+        # mode, admins trigger shipment creation from the Orders page instead.
+        if (update.status == "confirmed"
+                and update.payment_status == "verified"
+                and _is_auto_ship_enabled()):
+            merged_order = {**order, **updates}
+            create_shipment_for_order(merged_order)
 
         return {"success": True}
     except HTTPException:

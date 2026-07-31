@@ -26,10 +26,10 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Code</th><th>Shop Name</th><th>Shopkeeper</th><th>Contact</th><th>Products Listed</th><th>Total Sold</th><th>Actions</th></tr>
+            <tr><th>Code</th><th>Shop Name</th><th>Shopkeeper</th><th>Contact</th><th>Pickup Address</th><th>Products Listed</th><th>Total Sold</th><th>Actions</th></tr>
           </thead>
           <tbody id="sk-body">
-            <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr>
+            <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -57,6 +57,66 @@
       <label class="form-label">WhatsApp Number *</label>
       <input class="form-control" id="contact" placeholder="91XXXXXXXXXX">
     </div>
+    <div class="form-group">
+      <label class="form-label">Full Address (for courier pickup)</label>
+      <textarea class="form-control" id="address" rows="2" placeholder="Shop no, street, area, landmark"></textarea>
+    </div>
+    <div style="display:flex;gap:12px">
+      <div class="form-group" style="flex:1">
+        <label class="form-label">Pincode</label>
+        <input class="form-control" id="pincode" maxlength="6" placeholder="6 digit pincode">
+      </div>
+      <div class="form-group" style="flex:1">
+        <label class="form-label">City</label>
+        <input class="form-control" id="city" placeholder="e.g. Bengaluru">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">State</label>
+      <select class="form-control" id="state">
+        <option value="">— select state —</option>
+        <option>Andhra Pradesh</option>
+        <option>Arunachal Pradesh</option>
+        <option>Assam</option>
+        <option>Bihar</option>
+        <option>Chhattisgarh</option>
+        <option>Goa</option>
+        <option>Gujarat</option>
+        <option>Haryana</option>
+        <option>Himachal Pradesh</option>
+        <option>Jharkhand</option>
+        <option>Karnataka</option>
+        <option>Kerala</option>
+        <option>Madhya Pradesh</option>
+        <option>Maharashtra</option>
+        <option>Manipur</option>
+        <option>Meghalaya</option>
+        <option>Mizoram</option>
+        <option>Nagaland</option>
+        <option>Odisha</option>
+        <option>Punjab</option>
+        <option>Rajasthan</option>
+        <option>Sikkim</option>
+        <option>Tamil Nadu</option>
+        <option>Telangana</option>
+        <option>Tripura</option>
+        <option>Uttar Pradesh</option>
+        <option>Uttarakhand</option>
+        <option>West Bengal</option>
+        <option>Andaman and Nicobar Islands</option>
+        <option>Chandigarh</option>
+        <option>Dadra and Nagar Haveli and Daman and Diu</option>
+        <option>Delhi</option>
+        <option>Jammu and Kashmir</option>
+        <option>Ladakh</option>
+        <option>Lakshadweep</option>
+        <option>Puducherry</option>
+      </select>
+    </div>
+    <div class="form-group" id="pickup-id-row" style="display:none">
+      <label class="form-label">NimbusPost Pickup ID</label>
+      <input class="form-control" id="pickup-id-display" readonly style="background:#F3F0FF;color:var(--muted)">
+    </div>
     <div style="display:flex;gap:12px;margin-top:8px">
       <button class="btn btn-primary btn-lg" style="flex:1" id="submit-btn" onclick="saveShopkeeper()">Save</button>
       <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
@@ -74,7 +134,7 @@ async function loadShopkeepers() {
     const sks = await apiFetch("/api/shopkeepers/admin/all");
     const body = document.getElementById("sk-body");
     if (!sks.length) {
-      body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">No shopkeepers yet.</td></tr>';
+      body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">No shopkeepers yet.</td></tr>';
       return;
     }
     body.innerHTML = sks.map(s => `
@@ -83,6 +143,10 @@ async function loadShopkeepers() {
         <td><strong>${s.shop_name}</strong></td>
         <td>${s.shopkeeper_name}</td>
         <td><a href="https://wa.me/${s.contact}" target="_blank" style="color:var(--primary)">${s.contact}</a></td>
+        <td style="font-size:0.8rem">
+          ${s.address ? `${s.city || ''}, ${s.state || ''}` : '<span style="color:var(--muted)">Not set</span>'}
+          ${s.nimbuspost_pickup_id ? `<br><span class="badge badge-success" style="margin-top:4px">Pickup Registered</span>` : (s.address ? `<br><span class="badge badge-warning" style="margin-top:4px">Not Registered</span>` : '')}
+        </td>
         <td>${s.total_products}</td>
         <td>${s.total_sold}</td>
         <td>
@@ -102,6 +166,11 @@ function openModal() {
   document.getElementById("shop_name").value = "";
   document.getElementById("shopkeeper_name").value = "";
   document.getElementById("contact").value = "";
+  document.getElementById("address").value = "";
+  document.getElementById("pincode").value = "";
+  document.getElementById("city").value = "";
+  document.getElementById("state").value = "";
+  document.getElementById("pickup-id-row").style.display = "none";
   document.getElementById("modal-alert").innerHTML = "";
   document.getElementById("sk-modal").classList.add("open");
 }
@@ -112,6 +181,16 @@ function openEdit(s) {
   document.getElementById("shop_name").value = s.shop_name;
   document.getElementById("shopkeeper_name").value = s.shopkeeper_name;
   document.getElementById("contact").value = s.contact;
+  document.getElementById("address").value = s.address || "";
+  document.getElementById("pincode").value = s.pincode || "";
+  document.getElementById("city").value = s.city || "";
+  document.getElementById("state").value = s.state || "";
+  if (s.nimbuspost_pickup_id) {
+    document.getElementById("pickup-id-row").style.display = "block";
+    document.getElementById("pickup-id-display").value = s.nimbuspost_pickup_id;
+  } else {
+    document.getElementById("pickup-id-row").style.display = "none";
+  }
   document.getElementById("modal-alert").innerHTML = "";
   document.getElementById("sk-modal").classList.add("open");
 }
@@ -124,18 +203,26 @@ async function saveShopkeeper() {
   const data = {
     shop_name: document.getElementById("shop_name").value.trim(),
     shopkeeper_name: document.getElementById("shopkeeper_name").value.trim(),
-    contact: document.getElementById("contact").value.trim()
+    contact: document.getElementById("contact").value.trim(),
+    address: document.getElementById("address").value.trim() || null,
+    pincode: document.getElementById("pincode").value.trim() || null,
+    city: document.getElementById("city").value.trim() || null,
+    state: document.getElementById("state").value || null
   };
   if (!data.shop_name || !data.shopkeeper_name || !data.contact) {
-    document.getElementById("modal-alert").innerHTML = '<div class="alert alert-danger">All fields required</div>';
+    document.getElementById("modal-alert").innerHTML = '<div class="alert alert-danger">Shop name, shopkeeper name and contact are required</div>';
     btn.disabled = false; btn.textContent = "Save";
     return;
   }
   try {
     const url = editingId ? `/api/shopkeepers/admin/${editingId}` : "/api/shopkeepers/admin/add";
     const method = editingId ? "PUT" : "POST";
-    await apiFetch(url, { method, body: JSON.stringify(data) });
-    showToast(editingId ? "Updated! ✅" : "Shopkeeper added! ✅");
+    const result = await apiFetch(url, { method, body: JSON.stringify(data) });
+    if (data.address && !result.nimbuspost_pickup_id) {
+      showToast(editingId ? "Updated! ⚠️ NimbusPost pickup registration failed — check address details" : "Shopkeeper added! ⚠️ NimbusPost pickup registration failed", "warning");
+    } else {
+      showToast(editingId ? "Updated! ✅" : "Shopkeeper added! ✅");
+    }
     closeModal();
     loadShopkeepers();
   } catch(e) {

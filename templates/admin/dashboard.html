@@ -7,6 +7,14 @@
   <title>Dashboard — Clothyk Admin</title>
   <link rel="stylesheet" href="/static/css/shared.css">
   <link rel="stylesheet" href="/static/css/admin.css">
+  <style>
+    .toggle-switch { position:relative; display:inline-block; width:44px; height:24px; }
+    .toggle-switch input { opacity:0; width:0; height:0; }
+    .toggle-slider { position:absolute; cursor:pointer; inset:0; background:#D1D5DB; border-radius:24px; transition:.2s; }
+    .toggle-slider:before { position:absolute; content:""; height:18px; width:18px; left:3px; bottom:3px; background:white; border-radius:50%; transition:.2s; }
+    .toggle-switch input:checked + .toggle-slider { background:var(--primary,#7C3AED); }
+    .toggle-switch input:checked + .toggle-slider:before { transform:translateX(20px); }
+  </style>
 </head>
 <body>
 <div class="admin-layout">
@@ -34,8 +42,27 @@
         <div class="stat-card green"><div class="stat-label">Profit Today</div><div class="stat-value skeleton" style="height:36px;width:80px"></div></div>
       </div>
 
+      <!-- Shipment Stat Cards -->
+      <div class="stat-grid" id="shipment-stat-cards" style="margin-top:16px">
+        <div class="stat-card"><div class="stat-label">Shipments Created Today</div><div class="stat-value skeleton" style="height:36px;width:60px"></div></div>
+        <div class="stat-card amber"><div class="stat-label">Pending Shipments</div><div class="stat-value skeleton" style="height:36px;width:60px"></div></div>
+        <div class="stat-card green"><div class="stat-label">In-Transit Shipments</div><div class="stat-value skeleton" style="height:36px;width:60px"></div></div>
+      </div>
+
+      <!-- NimbusPost mode toggle -->
+      <div class="stat-card" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-weight:700">NimbusPost Auto-Ship</div>
+          <div style="color:var(--muted);font-size:0.85rem">When on, shipments are created automatically the moment payment is verified. When off, use the "Create Shipment" button on the Orders page.</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="auto-ship-toggle" onchange="toggleAutoShip()">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
       <!-- Recent Orders -->
-      <div class="page-header" style="margin-bottom:16px">
+      <div class="page-header" style="margin-bottom:16px;margin-top:24px">
         <h2>📦 Recent Orders</h2>
         <a href="/admin/orders" class="btn btn-outline btn-sm">View All</a>
       </div>
@@ -78,6 +105,13 @@ async function loadDashboard() {
       <div class="stat-card green"><div class="stat-label">Orders Today</div><div class="stat-value">${data.orders_today}</div></div>
       <div class="stat-card amber"><div class="stat-label">Revenue Today</div><div class="stat-value">${formatPrice(data.revenue_today)}</div></div>
       <div class="stat-card green"><div class="stat-label">Profit Today</div><div class="stat-value">${formatPrice(data.profit_today)}</div></div>
+    `;
+
+    // Shipment stat cards
+    document.getElementById("shipment-stat-cards").innerHTML = `
+      <div class="stat-card"><div class="stat-label">Shipments Created Today</div><div class="stat-value">${data.shipments_today ?? 0}</div></div>
+      <div class="stat-card amber"><div class="stat-label">Pending Shipments</div><div class="stat-value">${data.pending_shipments ?? 0}</div></div>
+      <div class="stat-card green"><div class="stat-label">In-Transit Shipments</div><div class="stat-value">${data.in_transit_shipments ?? 0}</div></div>
     `;
 
     // Recent orders
@@ -134,12 +168,36 @@ async function loadDashboard() {
   }
 }
 
+async function loadAutoShipSetting() {
+  try {
+    const setting = await apiFetch("/api/admin/settings/nimbuspost_auto_mode");
+    document.getElementById("auto-ship-toggle").checked = setting.value === "true";
+  } catch(e) {
+    // Setting may not exist yet — default off, no error shown to admin
+  }
+}
+
+async function toggleAutoShip() {
+  const enabled = document.getElementById("auto-ship-toggle").checked;
+  try {
+    await apiFetch("/api/admin/settings/nimbuspost_auto_mode", {
+      method: "PUT",
+      body: JSON.stringify({ value: enabled ? "true" : "false" })
+    });
+    showToast(enabled ? "Auto-ship enabled ✅" : "Auto-ship disabled — manual mode", enabled ? "success" : "warning");
+  } catch(e) {
+    showToast("Failed to update setting", "error");
+    document.getElementById("auto-ship-toggle").checked = !enabled;
+  }
+}
+
 async function logout() {
   await apiFetch("/api/auth/logout", { method: "POST" });
   window.location = "/admin/login";
 }
 
 loadDashboard();
+loadAutoShipSetting();
 </script>
 </body>
 </html>

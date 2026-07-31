@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from utils.db import supabase_admin
 from utils.auth_utils import require_admin
+from utils.nimbuspost import register_pickup_address
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -12,12 +13,36 @@ class ShopkeeperCreate(BaseModel):
     shop_name: str
     shopkeeper_name: str
     contact: str
+    address: str | None = None
+    pincode: str | None = None
+    city: str | None = None
+    state: str | None = None
 
 
 class ShopkeeperUpdate(BaseModel):
     shop_name: str | None = None
     shopkeeper_name: str | None = None
     contact: str | None = None
+    address: str | None = None
+    pincode: str | None = None
+    city: str | None = None
+    state: str | None = None
+
+
+def _maybe_register_pickup(shopkeeper: dict) -> str | None:
+    """
+    Registers/refreshes the NimbusPost pickup address for a shopkeeper if
+    the address fields are present. Never raises — NimbusPost failures
+    must not block shopkeeper create/update.
+    """
+    if not (shopkeeper.get("address") and shopkeeper.get("pincode")
+            and shopkeeper.get("city") and shopkeeper.get("state")):
+        return None
+    try:
+        return register_pickup_address(shopkeeper)
+    except Exception as e:
+        logger.error(f"NimbusPost pickup registration errored for shopkeeper {shopkeeper.get('id')}: {e}")
+        return None
 
 
 @router.get("/admin/all")
@@ -47,10 +72,24 @@ async def add_shopkeeper(data: ShopkeeperCreate, admin=Depends(require_admin)):
         res = supabase_admin.table("shopkeepers").insert({
             "shop_name": data.shop_name,
             "shopkeeper_name": data.shopkeeper_name,
-            "contact": data.contact
+            "contact": data.contact,
+            "address": data.address,
+            "pincode": data.pincode,
+            "city": data.city,
+            "state": data.state,
         }).execute()
+        new_sk = res.data[0]
         logger.info(f"Shopkeeper added: {data.shop_name} by admin {admin['sub']}")
-        return res.data[0]
+
+        # Auto-register NimbusPost pickup address (never blocks shopkeeper creation)
+        pickup_id = _maybe_register_pickup(new_sk)
+        if pickup_id:
+            supabase_admin.table("shopkeepers").update({"nimbuspost_pickup_id": pickup_id}).eq("id", new_sk["id"]).execute()
+            new_sk["nimbuspost_pickup_id"] = pickup_id
+        elif data.address:
+            logger.warning(f"NimbusPost pickup registration failed/skipped for new shopkeeper {new_sk['id']}")
+
+        return new_sk
     except Exception as e:
         logger.error(f"Failed to add shopkeeper: {e}")
         raise HTTPException(status_code=500, detail="Failed to add shopkeeper")
@@ -61,7 +100,18 @@ async def update_shopkeeper(sk_id: int, data: ShopkeeperUpdate, admin=Depends(re
     try:
         updates = {k: v for k, v in data.dict().items() if v is not None}
         res = supabase_admin.table("shopkeepers").update(updates).eq("id", sk_id).execute()
-        return res.data[0] if res.data else {}
+        updated = res.data[0] if res.data else {}
+
+        # Re-register pickup address if address fields changed
+        if updated and any(k in updates for k in ("address", "pincode", "city", "state")):
+            pickup_id = _maybe_register_pickup(updated)
+            if pickup_id:
+                supabase_admin.table("shopkeepers").update({"nimbuspost_pickup_id": pickup_id}).eq("id", sk_id).execute()
+                updated["nimbuspost_pickup_id"] = pickup_id
+            else:
+                logger.warning(f"NimbusPost pickup re-registration failed/skipped for shopkeeper {sk_id}")
+
+        return updated
     except Exception as e:
         logger.error(f"Failed to update shopkeeper: {e}")
         raise HTTPException(status_code=500, detail="Failed to update shopkeeper")

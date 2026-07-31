@@ -5,6 +5,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from utils.db import supabase_admin
 from utils.auth_utils import get_admin_from_request, require_admin, hash_password
+from utils.nimbuspost import track_shipment, cancel_shipment
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -37,6 +38,16 @@ async def dashboard_data(admin=Depends(require_admin)):
 
         refund_pending = supabase_admin.table("orders").select("*").eq("refund_status","pending").execute().data or []
 
+        # NimbusPost shipment stats
+        shipments_today = supabase_admin.table("orders").select("id", count="exact")\
+            .gte("created_at", today).eq("shipping_status", "created").execute().count or 0
+
+        pending_shipments = supabase_admin.table("orders").select("id", count="exact")\
+            .eq("status", "confirmed").is_("nimbuspost_awb", "null").execute().count or 0
+
+        in_transit_shipments = supabase_admin.table("orders").select("id", count="exact")\
+            .eq("status", "shipped").not_.is_("nimbuspost_awb", "null").execute().count or 0
+
         return {
             "total_products": products_count,
             "orders_today": len(today_orders),
@@ -45,7 +56,10 @@ async def dashboard_data(admin=Depends(require_admin)):
             "recent_orders": recent,
             "low_stock": low_stock,
             "out_of_stock": out_of_stock,
-            "refund_pending": refund_pending
+            "refund_pending": refund_pending,
+            "shipments_today": shipments_today,
+            "pending_shipments": pending_shipments,
+            "in_transit_shipments": in_transit_shipments,
         }
     except Exception as e:
         logger.error(f"Dashboard data failed: {e}")
@@ -64,3 +78,121 @@ async def change_password(
     hashed = hash_password(new_pass)
     supabase_admin.table("admins").update({"password": hashed}).eq("username", admin["sub"]).execute()
     return {"success": True}
+
+
+# ─── NimbusPost Shipment Endpoints ─────────────────────────────────────────
+
+@router.get("/orders/{order_id}/label")
+async def get_shipment_label(order_id: str, admin=Depends(require_admin)):
+    try:
+        res = supabase_admin.table("orders").select("label_url").eq("id", order_id).single().execute()
+        order = res.data
+        if not order or not order.get("label_url"):
+            raise HTTPException(status_code=404, detail="No shipping label available for this order")
+        return {"label_url": order["label_url"]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Label fetch failed for order {order_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch label")
+
+
+@router.post("/orders/{order_id}/ship")
+async def ship_order(order_id: str, admin=Depends(require_admin)):
+    # Import here (not at module top) to avoid a circular import between
+    # routers/admin.py and routers/orders.py
+    from routers.orders import create_shipment_for_order
+
+    try:
+        res = supabase_admin.table("orders").select("*").eq("id", order_id).single().execute()
+        order = res.data
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        if order.get("nimbuspost_awb"):
+            raise HTTPException(status_code=400, detail="Shipment already created for this order")
+
+        import os
+        if not (os.getenv("NIMBUSPOST_API_KEY") or (os.getenv("NIMBUSPOST_EMAIL") and os.getenv("NIMBUSPOST_PASSWORD"))):
+            raise HTTPException(status_code=400, detail="NimbusPost not configured")
+
+        result = create_shipment_for_order(order)
+        if not result:
+            raise HTTPException(status_code=502, detail="Shipment creation failed — check shopkeeper address and NimbusPost status, then retry")
+
+        logger.info(f"Admin {admin['sub']} manually created shipment for order {order_id}: AWB {result['awb']}")
+        return {"success": True, **result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Manual shipment creation failed for order {order_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create shipment")
+
+
+@router.post("/orders/{order_id}/cancel-shipment")
+async def cancel_order_shipment(order_id: str, admin=Depends(require_admin)):
+    try:
+        res = supabase_admin.table("orders").select("nimbuspost_awb").eq("id", order_id).single().execute()
+        order = res.data
+        if not order or not order.get("nimbuspost_awb"):
+            raise HTTPException(status_code=404, detail="No NimbusPost shipment found for this order")
+
+        ok = cancel_shipment(order["nimbuspost_awb"])
+        if not ok:
+            raise HTTPException(status_code=502, detail="NimbusPost cancellation failed — please retry")
+
+        supabase_admin.table("orders").update({"shipping_status": "cancelled"}).eq("id", order_id).execute()
+        logger.info(f"Admin {admin['sub']} cancelled shipment for order {order_id}")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Shipment cancellation failed for order {order_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to cancel shipment")
+
+
+@router.get("/orders/{order_id}/track")
+async def track_order_shipment(order_id: str, admin=Depends(require_admin)):
+    try:
+        res = supabase_admin.table("orders").select("nimbuspost_awb").eq("id", order_id).single().execute()
+        order = res.data
+        if not order or not order.get("nimbuspost_awb"):
+            raise HTTPException(status_code=404, detail="No NimbusPost shipment found for this order")
+
+        tracking = track_shipment(order["nimbuspost_awb"])
+        if tracking is None:
+            raise HTTPException(status_code=502, detail="NimbusPost tracking unavailable right now — please retry")
+
+        return tracking
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Tracking fetch failed for order {order_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch tracking info")
+
+
+# ─── Settings (manual/auto shipment mode) ──────────────────────────────────
+
+class SettingUpdate(BaseModel):
+    value: str
+
+
+@router.get("/settings/{key}")
+async def get_setting(key: str, admin=Depends(require_admin)):
+    try:
+        res = supabase_admin.table("settings").select("*").eq("key", key).maybe_single().execute()
+        return res.data or {"key": key, "value": None}
+    except Exception as e:
+        logger.error(f"Failed to fetch setting {key}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch setting")
+
+
+@router.put("/settings/{key}")
+async def update_setting(key: str, data: SettingUpdate, admin=Depends(require_admin)):
+    try:
+        supabase_admin.table("settings").upsert({"key": key, "value": data.value}).execute()
+        logger.info(f"Setting updated: {key} = {data.value} by admin {admin['sub']}")
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Failed to update setting {key}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update setting")

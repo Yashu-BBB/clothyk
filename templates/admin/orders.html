@@ -10,6 +10,8 @@
   <style>
     .filter-bar { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
     .filter-bar select, .filter-bar input { padding:8px 12px; border:2px solid var(--border); border-radius:8px; font-size:0.9rem; }
+    .ship-actions { display:flex; flex-direction:column; gap:4px; }
+    .ship-actions .btn { white-space:nowrap; }
   </style>
 </head>
 <body>
@@ -44,11 +46,11 @@
             <tr>
               <th>Order</th><th>Customer</th><th>Product</th>
               <th>Amount</th><th>Profit</th><th>Payment</th>
-              <th>Status</th><th>Date</th><th>Actions</th>
+              <th>Status</th><th>Shipping</th><th>Date</th><th>Actions</th>
             </tr>
           </thead>
           <tbody id="orders-body">
-            <tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr>
+            <tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted)">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -117,6 +119,17 @@
   </div>
 </div>
 
+<!-- Tracking Popup -->
+<div class="modal-overlay" id="track-modal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3 class="modal-title">Live Tracking</h3>
+      <button class="modal-close" onclick="document.getElementById('track-modal').classList.remove('open')">×</button>
+    </div>
+    <div id="track-content" style="padding:8px 0">Loading...</div>
+  </div>
+</div>
+
 <div id="toast-container"></div>
 <script src="/static/js/shared.js"></script>
 <script>
@@ -130,7 +143,7 @@ async function loadOrders() {
     const orders = await apiFetch(url);
     const body = document.getElementById("orders-body");
     if (!orders.length) {
-      body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">No orders found</td></tr>';
+      body.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted)">No orders found</td></tr>';
       return;
     }
     body.innerHTML = orders.map(o => `
@@ -145,6 +158,7 @@ async function loadOrders() {
           <strong>${o.product_name}</strong><br>
           <span style="color:var(--muted);font-size:0.8rem">Size: ${o.size} · ${o.color}</span>
           ${o.tracking_id ? `<br><span style="font-size:0.75rem">📦 ${o.tracking_id}</span>` : ''}
+          ${o.courier_name ? `<br><span style="font-size:0.7rem;color:var(--muted)">${o.courier_name}</span>` : ''}
         </td>
         <td><strong>${formatPrice(o.our_price)}</strong></td>
         <td style="color:var(--success);font-weight:700">+${formatPrice(o.profit)}</td>
@@ -155,8 +169,21 @@ async function loadOrders() {
         <td><span class="badge badge-${STATUS_COLORS[o.status]||'muted'}">${o.status}</span>
           ${o.refund_status && o.refund_status !== 'none' ? `<br><span class="badge badge-warning" style="margin-top:4px">${o.refund_status}</span>` : ''}
         </td>
+        <td style="font-size:0.75rem">
+          ${o.nimbuspost_awb
+            ? `<span class="badge badge-success">${o.shipping_status || 'created'}</span>`
+            : (o.status === 'confirmed' ? '<span class="badge badge-warning">Not shipped</span>' : '<span style="color:var(--muted)">—</span>')}
+        </td>
         <td style="font-size:0.8rem;color:var(--muted)">${new Date(o.created_at).toLocaleDateString('en-IN')}</td>
-        <td><button class="btn btn-outline btn-sm" onclick='openUpdate(${JSON.stringify(o)})'>Update</button></td>
+        <td>
+          <div class="ship-actions">
+            <button class="btn btn-outline btn-sm" onclick='openUpdate(${JSON.stringify(o)})'>Update</button>
+            ${!o.nimbuspost_awb ? `<button class="btn btn-primary btn-sm" onclick="createShipment('${o.id}')">Create Shipment</button>` : ''}
+            ${o.label_url ? `<button class="btn btn-outline btn-sm" onclick="printLabel('${o.id}')">Print Label</button>` : ''}
+            ${o.nimbuspost_awb ? `<button class="btn btn-outline btn-sm" onclick="trackShipment('${o.id}')">Track</button>` : ''}
+            ${o.nimbuspost_awb ? `<button class="btn btn-danger btn-sm" onclick="cancelShipment('${o.id}')">Cancel Shipment</button>` : ''}
+          </div>
+        </td>
       </tr>
     `).join("");
   } catch(e) {
@@ -206,6 +233,56 @@ async function saveStatus() {
     loadOrders();
   } catch(e) {
     document.getElementById("modal-alert").innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+  }
+}
+
+// ─── NimbusPost shipment actions ────────────────────────────────────────
+
+async function createShipment(orderId) {
+  try {
+    showToast("Creating shipment with NimbusPost...");
+    await apiFetch(`/api/admin/orders/${orderId}/ship`, { method: "POST" });
+    showToast("Shipment created! ✅ Label ready to print.");
+    loadOrders();
+  } catch(e) {
+    showToast(e.message || "Failed to create shipment", "error");
+  }
+}
+
+async function printLabel(orderId) {
+  try {
+    const res = await apiFetch(`/api/admin/orders/${orderId}/label`);
+    window.open(res.label_url, "_blank");
+  } catch(e) {
+    showToast(e.message || "Label not available", "error");
+  }
+}
+
+async function trackShipment(orderId) {
+  const modal = document.getElementById("track-modal");
+  const content = document.getElementById("track-content");
+  content.innerHTML = "Loading...";
+  modal.classList.add("open");
+  try {
+    const t = await apiFetch(`/api/admin/orders/${orderId}/track`);
+    content.innerHTML = `
+      <p><strong>Status:</strong> ${t.status || 'Unknown'}</p>
+      <p><strong>Location:</strong> ${t.location || '—'}</p>
+      <p><strong>Last Updated:</strong> ${t.timestamp || '—'}</p>
+    `;
+  } catch(e) {
+    content.innerHTML = `<div class="alert alert-danger">${e.message || 'Tracking unavailable'}</div>`;
+  }
+}
+
+async function cancelShipment(orderId) {
+  if (!confirm("Cancel this NimbusPost shipment?")) return;
+  try {
+    await apiFetch(`/api/admin/orders/${orderId}/cancel-shipment`, { method: "POST" });
+    showToast("Shipment cancelled", "warning");
+    loadOrders();
+  } catch(e) {
+    showToast(e.message || "Failed to cancel shipment", "error");
   }
 }
 
