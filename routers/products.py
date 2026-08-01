@@ -12,7 +12,7 @@ from utils.auth_utils import require_admin
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-SAFE_FIELDS = "id,name,description,our_price,mrp,sizes,colors,image,category,gender,featured,stock,shopkeeper_code,view_count,created_at,size_chart"
+SAFE_FIELDS = "id,name,description,our_price,mrp,sizes,colors,image,category,gender,featured,stock,shopkeeper_code,view_count,created_at"
 
 
 # ─── PUBLIC ENDPOINTS ─────────────────────────────────────────────────────
@@ -20,12 +20,17 @@ SAFE_FIELDS = "id,name,description,our_price,mrp,sizes,colors,image,category,gen
 @router.get("/")
 async def list_products(
     category: Optional[str] = None,
-    search: Optional[str] = None,
+    search: Optional[str] = None,      # searches name, color, size, category, shopkeeper code
     sort: Optional[str] = None,
     featured: Optional[bool] = None,
-    gender: Optional[str] = None
+    gender: Optional[str] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    sizes: Optional[str] = None,        # comma separated e.g. "S,M,XL"
+    colors: Optional[str] = None,       # comma separated e.g. "Red,Black"
+    on_sale: Optional[bool] = None,     # only discounted products
 ):
-    cache_key = f"products:list:{category}:{search}:{sort}:{featured}:{gender}"
+    cache_key = f"products:list:{category}:{search}:{sort}:{featured}:{gender}:{min_price}:{max_price}:{sizes}:{colors}:{on_sale}"
     cached = await cache_get(cache_key)
     if cached:
         return cached
@@ -38,12 +43,44 @@ async def list_products(
             query = query.eq("featured", featured)
         if gender:
             query = query.eq("gender", gender)
+
         if search:
-            query = query.ilike("name", f"%{search}%")
+            # name / category / shopkeeper_code text match, or search term present in the sizes/colors JSONB arrays
+            safe_search = search.replace('"', '')
+            query = query.or_(
+                f'name.ilike.%{safe_search}%,'
+                f'category.ilike.%{safe_search}%,'
+                f'shopkeeper_code.ilike.%{safe_search}%,'
+                f'colors.cs.["{safe_search}"],'
+                f'sizes.cs.["{safe_search}"]'
+            )
+
+        if min_price is not None:
+            query = query.gte("our_price", min_price)
+        if max_price is not None:
+            query = query.lte("our_price", max_price)
+
+        if sizes:
+            size_list = [s.strip() for s in sizes.split(",") if s.strip()]
+            if size_list:
+                or_clause = ",".join(f'sizes.cs.["{s}"]' for s in size_list)
+                query = query.or_(or_clause)
+
+        if colors:
+            color_list = [c.strip() for c in colors.split(",") if c.strip()]
+            if color_list:
+                or_clause = ",".join(f'colors.cs.["{c}"]' for c in color_list)
+                query = query.or_(or_clause)
+
+        if on_sale:
+            query = query.not_.is_("mrp", "null")
+
         if sort == "price_asc":
             query = query.order("our_price", desc=False)
         elif sort == "price_desc":
             query = query.order("our_price", desc=True)
+        elif sort == "discount":
+            query = query.not_.is_("mrp", "null").order("mrp", desc=True)
         else:
             query = query.order("created_at", desc=True)
 
@@ -54,6 +91,44 @@ async def list_products(
     except Exception as e:
         logger.error(f"Failed to fetch products: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch products")
+
+
+@router.get("/filter-options")
+async def get_filter_options(gender: Optional[str] = None):
+    cache_key = f"products:filter-options:{gender}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+    try:
+        query = supabase_admin.table("products").select("sizes,colors,our_price").gt("stock", 0)
+        if gender:
+            query = query.eq("gender", gender)
+        res = query.execute()
+        rows = res.data or []
+
+        size_set, color_set = set(), set()
+        prices = []
+        for row in rows:
+            for s in (row.get("sizes") or []):
+                size_set.add(s)
+            for c in (row.get("colors") or []):
+                color_set.add(c)
+            if row.get("our_price") is not None:
+                prices.append(row["our_price"])
+
+        result = {
+            "sizes": sorted(size_set),
+            "colors": sorted(color_set),
+            "price_range": {
+                "min": min(prices) if prices else 0,
+                "max": max(prices) if prices else 0,
+            },
+        }
+        await cache_set(cache_key, result, ttl=900)
+        return result
+    except Exception as e:
+        logger.error(f"Failed to fetch filter options: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch filter options")
 
 
 @router.get("/featured")
@@ -144,7 +219,6 @@ async def add_product(
     stock: int = Form(1),
     mrp: float = Form(None),
     shopkeeper_id: int = Form(...),
-    size_chart: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     admin=Depends(require_admin)
 ):
@@ -176,8 +250,7 @@ async def add_product(
             "stock": stock,
             "shopkeeper_id": shopkeeper_id,
             "shopkeeper_code": shopkeeper_code,
-            "image": image_url,
-            "size_chart": json.loads(size_chart) if size_chart else None
+            "image": image_url
         }
         res = supabase_admin.table("products").insert(product).execute()
         await cache_clear_pattern("products:*")
@@ -205,8 +278,6 @@ async def edit_product(
     stock: int = Form(None),
     mrp: float = Form(None),
     shopkeeper_id: int = Form(None),
-    size_chart: Optional[str] = Form(None),
-    clear_size_chart: Optional[bool] = Form(False),
     image: Optional[UploadFile] = File(None),
     admin=Depends(require_admin)
 ):
@@ -226,10 +297,6 @@ async def edit_product(
         if shopkeeper_id is not None:
             updates["shopkeeper_id"] = shopkeeper_id
             updates["shopkeeper_code"] = f"#{shopkeeper_id:03d}"
-        if clear_size_chart:
-            updates["size_chart"] = None
-        elif size_chart is not None:
-            updates["size_chart"] = json.loads(size_chart) if size_chart else None
 
         if image and image.filename:
             contents = await image.read()

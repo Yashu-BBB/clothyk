@@ -75,6 +75,44 @@
     }
 
     .gender-tab:hover:not(.active) { color: #0A0A0A; }
+
+    /* ─── SEARCH BAR ──────────────────────────────────────── */
+    .search-bar-wrap { padding-top: 24px; }
+    .search-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      background: transparent;
+      transition: border-color 0.2s;
+    }
+    .search-bar:focus-within { border-color: var(--black); }
+    .search-bar svg { width: 17px; height: 17px; flex-shrink: 0; color: #9B9B9B; }
+    .search-bar input {
+      flex: 1;
+      border: none;
+      outline: none;
+      background: none;
+      font-family: var(--font-body);
+      font-size: 0.85rem;
+      color: var(--black);
+    }
+    .search-bar input::placeholder { color: #ABABAB; }
+    .search-clear-btn {
+      display: none;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: #9B9B9B;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 2px 4px;
+    }
+    .search-clear-btn:hover { color: var(--black); }
+    .search-clear-btn.show { display: block; }
+
     /* ─── FILTERS ─────────────────────────────────────────── */
     .filters-row {
       display: flex;
@@ -133,6 +171,183 @@
     }
     .sort-select:focus { border-color: var(--black); }
 
+    /* ─── FILTER BAR (desktop dropdowns) ────────────────────── */
+    .filter-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 0 16px;
+      flex-wrap: wrap;
+    }
+
+    .filter-dropdown { position: relative; }
+
+    .filter-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      font-family: var(--font-body);
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      color: var(--black);
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .filter-btn:hover { border-color: var(--black); }
+    .filter-btn.active-count { border-color: var(--black); }
+    .filter-btn .chev { width: 9px; height: 9px; transition: transform 0.2s; }
+    .filter-btn.open .chev { transform: rotate(180deg); }
+
+    .filter-panel {
+      display: none;
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      padding: 18px;
+      min-width: 260px;
+      max-height: 340px;
+      overflow-y: auto;
+      z-index: 60;
+    }
+    .filter-panel.open { display: block; }
+
+    .onsale-toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      color: var(--black);
+    }
+
+    .toggle-switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0; cursor: pointer;
+      background: #E0E0E0; border-radius: 999px; transition: 0.2s;
+    }
+    .toggle-slider::before {
+      content: ""; position: absolute; width: 14px; height: 14px;
+      left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: 0.2s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background: var(--black); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); }
+
+    /* ─── SIZE CHIPS ─────────────────────────────────────────── */
+    .chip-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .size-chip {
+      padding: 4px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: #FFFFFF;
+      color: var(--black);
+      font-size: 0.72rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .size-chip:hover { border-color: var(--black); }
+    .size-chip.selected { background: var(--black); border-color: var(--black); color: #FFFFFF; }
+
+    /* ─── COLOR DOTS ─────────────────────────────────────────── */
+    .color-row { display: flex; flex-direction: column; gap: 4px; }
+    .color-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 4px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.75rem;
+      color: var(--black);
+      transition: background 0.15s;
+    }
+    .color-option:hover { background: #F5F5F5; }
+    .color-option.selected { font-weight: 600; }
+    .color-dot {
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 1px solid rgba(0,0,0,0.15);
+      flex-shrink: 0;
+    }
+    .color-option.selected .color-dot { box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--black); }
+
+    /* ─── PRICE SLIDER ───────────────────────────────────────── */
+    .price-label { font-size: 0.8rem; font-weight: 600; margin-bottom: 14px; color: var(--black); }
+    .price-slider-wrap { position: relative; height: 32px; margin-top: 6px; }
+    .price-slider-track { position: absolute; top: 14px; left: 0; right: 0; height: 3px; background: #E8E8E8; border-radius: 2px; }
+    .price-slider-fill { position: absolute; top: 14px; height: 3px; background: var(--black); border-radius: 2px; }
+    .price-range-input {
+      position: absolute; top: 8px; left: 0; width: 100%;
+      -webkit-appearance: none; appearance: none;
+      background: none; pointer-events: none; margin: 0;
+    }
+    .price-range-input::-webkit-slider-thumb {
+      -webkit-appearance: none; pointer-events: auto;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #FFFFFF; border: 2px solid var(--black); cursor: pointer;
+    }
+    .price-range-input::-moz-range-thumb {
+      pointer-events: auto; width: 14px; height: 14px; border-radius: 50%;
+      background: #FFFFFF; border: 2px solid var(--black); cursor: pointer;
+    }
+
+    /* ─── ACTIVE FILTER TAGS ─────────────────────────────────── */
+    .active-filters-row {
+      display: none;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 0 0 18px;
+    }
+    .active-filters-row.show { display: flex; }
+    .active-tag {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 10px 6px 12px;
+      background: #F5F5F5;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      color: var(--black);
+      letter-spacing: 0.02em;
+    }
+    .active-tag button {
+      border: none; background: none; cursor: pointer;
+      color: #6B6B6B; font-size: 0.85rem; line-height: 1; padding: 0;
+    }
+    .active-tag button:hover { color: var(--black); }
+    .clear-all-btn {
+      border: none; background: none; cursor: pointer;
+      font-size: 0.72rem; color: #6B6B6B; text-decoration: underline;
+      letter-spacing: 0.05em;
+    }
+    .clear-all-btn:hover { color: var(--black); }
+
+    /* ─── MOBILE FILTER BUTTON ───────────────────────────────── */
+    .mobile-filter-btn {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--black);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
     /* ─── RESULTS BAR ─────────────────────────────────────── */
     .results-bar {
       display: flex;
@@ -147,6 +362,45 @@
 
     .empty-state { text-align: center; padding: 80px 24px; color: #6B6B6B; grid-column: 1/-1; }
 
+    /* ─── MOBILE BOTTOM SHEET ─────────────────────────────────── */
+    .sheet-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 90;
+    }
+    .sheet-overlay.show { display: block; }
+
+    .bottom-sheet {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      background: #FFFFFF;
+      border-radius: 16px 16px 0 0;
+      max-height: 82vh;
+      display: flex;
+      flex-direction: column;
+      transform: translateY(100%);
+      transition: transform 0.25s ease;
+      z-index: 91;
+    }
+    .bottom-sheet.show { transform: translateY(0); }
+
+    .sheet-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .sheet-header-title { font-size: 0.9rem; font-weight: 700; letter-spacing: 0.04em; }
+    .sheet-reset-btn { border: none; background: none; font-size: 0.75rem; color: #6B6B6B; cursor: pointer; text-decoration: underline; }
+
+    .sheet-body { padding: 8px 20px 20px; overflow-y: auto; flex: 1; }
+    .sheet-section { padding: 18px 0; border-bottom: 1px solid var(--border); }
+    .sheet-section:last-child { border-bottom: none; }
+    .sheet-section-title { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px; color: var(--black); }
+
+    .sheet-footer { padding: 14px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
+
     @media (max-width: 768px) {
       .shop-header { padding: 36px 0 28px; }
       .shop-header-inner { padding: 0 20px; }
@@ -154,6 +408,9 @@
       .gender-tab { padding: 16px 20px; }
       .gender-tabs-bar { top: 60px; }
       .filters-row { padding: 16px 0; }
+      .filter-bar-row .filter-dropdown { display: none; }
+      .filter-bar-row .sort-select-desktop { display: none; }
+      .mobile-filter-btn { display: flex; }
     }
   </style>
 </head>
@@ -205,17 +462,80 @@
     </div>
   </div>
 
-  <div class="container" style="padding-top:28px; padding-bottom:80px">
+  <div class="container" style="padding-top:0; padding-bottom:80px">
 
-    <!-- Filters -->
+    <!-- Search -->
+    <div class="search-bar-wrap">
+      <div class="search-bar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-input" placeholder="Search by name, color, size, category..." oninput="onSearchInput()">
+        <button class="search-clear-btn" id="search-clear-btn" onclick="clearSearch()">×</button>
+      </div>
+    </div>
+
+    <!-- Category pills -->
     <div class="filters-row">
       <div class="cats-scroll-shop" id="cat-pills"></div>
-      <select class="sort-select" id="sort" onchange="loadProducts()">
+    </div>
+
+    <!-- Desktop filter bar -->
+    <div class="filter-bar-row">
+      <div class="filter-dropdown" id="dropdown-wrap-price">
+        <button class="filter-btn" id="btn-price" onclick="toggleDropdown('price')">
+          <span id="btn-price-label">Price</span>
+          <svg class="chev" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </button>
+        <div class="filter-panel" id="panel-price">
+          <div class="price-label" id="price-label-desktop">₹0 — ₹5000</div>
+          <div class="price-slider-wrap">
+            <div class="price-slider-track"></div>
+            <div class="price-slider-fill" id="price-fill-desktop"></div>
+            <input type="range" class="price-range-input" id="price-min-desktop" min="0" max="5000" value="0" step="10">
+            <input type="range" class="price-range-input" id="price-max-desktop" min="0" max="5000" value="5000" step="10">
+          </div>
+        </div>
+      </div>
+
+      <div class="filter-dropdown" id="dropdown-wrap-size">
+        <button class="filter-btn" id="btn-size" onclick="toggleDropdown('size')">
+          <span id="btn-size-label">Size</span>
+          <svg class="chev" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </button>
+        <div class="filter-panel" id="panel-size">
+          <div class="chip-grid" id="size-chips-desktop"></div>
+        </div>
+      </div>
+
+      <div class="filter-dropdown" id="dropdown-wrap-color">
+        <button class="filter-btn" id="btn-color" onclick="toggleDropdown('color')">
+          <span id="btn-color-label">Color</span>
+          <svg class="chev" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </button>
+        <div class="filter-panel" id="panel-color">
+          <div class="color-row" id="color-chips-desktop"></div>
+        </div>
+      </div>
+
+      <label class="onsale-toggle-row">
+        <span class="toggle-switch">
+          <input type="checkbox" id="onsale-desktop" onchange="onOnSaleChange(this.checked)">
+          <span class="toggle-slider"></span>
+        </span>
+        On Sale Only
+      </label>
+
+      <select class="sort-select sort-select-desktop" id="sort-desktop" onchange="onSortChange(this.value)">
         <option value="">Latest First</option>
         <option value="price_asc">Price: Low → High</option>
         <option value="price_desc">Price: High → Low</option>
+        <option value="discount">Discount: Highest First</option>
       </select>
+
+      <button class="mobile-filter-btn" onclick="openMobileSheet()">🎛️ Filters</button>
     </div>
+
+    <!-- Active filter tags -->
+    <div class="active-filters-row" id="active-filters"></div>
 
     <!-- Results -->
     <div class="results-bar">
@@ -241,22 +561,102 @@
     <p class="footer-copy">© 2025 Clothyk. All rights reserved.</p>
   </footer>
 
+  <!-- Mobile bottom sheet -->
+  <div class="sheet-overlay" id="sheet-overlay" onclick="closeMobileSheet()"></div>
+  <div class="bottom-sheet" id="bottom-sheet">
+    <div class="sheet-header">
+      <span class="sheet-header-title">Filters</span>
+      <button class="sheet-reset-btn" onclick="resetAllFilters()">Reset</button>
+    </div>
+    <div class="sheet-body">
+      <div class="sheet-section">
+        <div class="sheet-section-title">Price</div>
+        <div class="price-label" id="price-label-mobile">₹0 — ₹5000</div>
+        <div class="price-slider-wrap">
+          <div class="price-slider-track"></div>
+          <div class="price-slider-fill" id="price-fill-mobile"></div>
+          <input type="range" class="price-range-input" id="price-min-mobile" min="0" max="5000" value="0" step="10">
+          <input type="range" class="price-range-input" id="price-max-mobile" min="0" max="5000" value="5000" step="10">
+        </div>
+      </div>
+      <div class="sheet-section">
+        <div class="sheet-section-title">Size</div>
+        <div class="chip-grid" id="size-chips-mobile"></div>
+      </div>
+      <div class="sheet-section">
+        <div class="sheet-section-title">Color</div>
+        <div class="color-row" id="color-chips-mobile"></div>
+      </div>
+      <div class="sheet-section">
+        <div class="sheet-section-title">Sort By</div>
+        <select class="sort-select" id="sort-mobile" style="width:100%" onchange="onSortChange(this.value)">
+          <option value="">Latest First</option>
+          <option value="price_asc">Price: Low → High</option>
+          <option value="price_desc">Price: High → Low</option>
+          <option value="discount">Discount: Highest First</option>
+        </select>
+      </div>
+      <div class="sheet-section">
+        <label class="onsale-toggle-row">
+          <span class="toggle-switch">
+            <input type="checkbox" id="onsale-mobile" onchange="onOnSaleChange(this.checked)">
+            <span class="toggle-slider"></span>
+          </span>
+          On Sale Only
+        </label>
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-dark btn-block" onclick="closeMobileSheet(); loadProducts();">Apply Filters</button>
+    </div>
+  </div>
+
   <div id="toast-container"></div>
   <script src="/static/js/shared.js"></script>
   <script>
+    const COLOR_MAP = {
+      'Red': '#E53E3E', 'Black': '#1A1A1A', 'White': '#F7F7F7', 'Navy Blue': '#1A365D',
+      'Blue': '#3182CE', 'Green': '#38A169', 'Yellow': '#ECC94B', 'Pink': '#ED64A6',
+      'Purple': '#805AD5', 'Orange': '#ED8936', 'Grey': '#718096', 'Brown': '#92400E',
+      'Maroon': '#742A2A', 'Beige': '#F5E6C8', 'Cream': '#FFFFF0', 'Gold': '#C9A96E',
+      'Silver': '#C0C0C0', 'Multicolor': 'linear-gradient(135deg, red, blue, green)',
+    };
+
     let currentGender = 'Girls';
     let currentCat = null;
+    let searchTerm = '';
+    let selectedSizes = new Set();
+    let selectedColors = new Set();
+    let sortValue = '';
+    let onSaleOnly = false;
+    let priceBounds = { min: 0, max: 5000 };
+    let priceMin = 0;
+    let priceMax = 5000;
+    let priceTouched = false;
+
+    let allSizes = [];
+    let allColors = [];
 
     const urlParams = new URLSearchParams(location.search);
     const urlGender = urlParams.get('gender');
     const urlCat = urlParams.get('category');
+
+    function debounce(fn, delay) {
+      let t;
+      return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+    }
 
     async function init() {
       if (urlGender === 'Boys') currentGender = 'Boys';
       if (urlCat) currentCat = urlCat;
       updateGenderUI();
       await loadCategories();
+      await loadFilterOptions();
       await loadProducts();
+
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.filter-dropdown')) closeAllDropdowns();
+      });
     }
 
     function updateGenderUI() {
@@ -287,19 +687,266 @@
       loadProducts();
     }
 
+    // ─── Filter options (sizes/colors/price range) ──────────────────────
+    async function loadFilterOptions() {
+      try {
+        const opts = await apiFetch(`/api/products/filter-options?gender=${currentGender}`);
+        allSizes = opts.sizes || [];
+        allColors = opts.colors || [];
+        if (opts.price_range && opts.price_range.max > 0) {
+          priceBounds = { min: 0, max: Math.ceil(opts.price_range.max / 100) * 100 };
+          if (!priceTouched) { priceMin = priceBounds.min; priceMax = priceBounds.max; }
+        }
+        renderSizeChips();
+        renderColorChips();
+        setupPriceSliders();
+      } catch(e) {}
+    }
+
+    function renderSizeChips() {
+      const html = allSizes.map(s => `
+        <div class="size-chip ${selectedSizes.has(s) ? 'selected' : ''}" onclick="toggleSize('${s.replace(/'/g,"\\'")}')">${s}</div>
+      `).join('') || '<span style="font-size:0.75rem;color:#9B9B9B">No sizes available</span>';
+      document.getElementById('size-chips-desktop').innerHTML = html;
+      document.getElementById('size-chips-mobile').innerHTML = html;
+    }
+
+    function renderColorChips() {
+      const html = allColors.map(c => {
+        const bg = COLOR_MAP[c] || '#B5B5B5';
+        return `
+        <div class="color-option ${selectedColors.has(c) ? 'selected' : ''}" onclick="toggleColor('${c.replace(/'/g,"\\'")}')">
+          <span class="color-dot" style="background:${bg}"></span>${c}
+        </div>`;
+      }).join('') || '<span style="font-size:0.75rem;color:#9B9B9B">No colors available</span>';
+      document.getElementById('color-chips-desktop').innerHTML = html;
+      document.getElementById('color-chips-mobile').innerHTML = html;
+    }
+
+    function toggleSize(s) {
+      if (selectedSizes.has(s)) selectedSizes.delete(s); else selectedSizes.add(s);
+      renderSizeChips();
+      updateFilterButtonLabels();
+      renderActiveFilters();
+      loadProducts();
+    }
+
+    function toggleColor(c) {
+      if (selectedColors.has(c)) selectedColors.delete(c); else selectedColors.add(c);
+      renderColorChips();
+      updateFilterButtonLabels();
+      renderActiveFilters();
+      loadProducts();
+    }
+
+    // ─── Price slider ─────────────────────────────────────────────────
+    function setupPriceSliders() {
+      initSlider('price-min-desktop', 'price-max-desktop', 'price-fill-desktop', 'price-label-desktop');
+      initSlider('price-min-mobile', 'price-max-mobile', 'price-fill-mobile', 'price-label-mobile');
+    }
+
+    function initSlider(minId, maxId, fillId, labelId) {
+      const minEl = document.getElementById(minId);
+      const maxEl = document.getElementById(maxId);
+      minEl.min = priceBounds.min; minEl.max = priceBounds.max;
+      maxEl.min = priceBounds.min; maxEl.max = priceBounds.max;
+      minEl.value = priceMin; maxEl.value = priceMax;
+
+      const update = () => {
+        let lo = parseInt(minEl.value), hi = parseInt(maxEl.value);
+        if (lo > hi) { [lo, hi] = [hi, lo]; }
+        minEl.value = lo; maxEl.value = hi;
+        const range = priceBounds.max - priceBounds.min || 1;
+        const leftPct = ((lo - priceBounds.min) / range) * 100;
+        const rightPct = ((hi - priceBounds.min) / range) * 100;
+        document.getElementById(fillId).style.left = leftPct + '%';
+        document.getElementById(fillId).style.width = (rightPct - leftPct) + '%';
+        document.getElementById(labelId).textContent = `₹${lo} — ₹${hi}`;
+      };
+      update();
+
+      minEl.addEventListener('input', update);
+      maxEl.addEventListener('input', update);
+
+      const commit = () => {
+        priceMin = parseInt(minEl.value);
+        priceMax = parseInt(maxEl.value);
+        priceTouched = true;
+        syncPriceSliders(minId);
+        updateFilterButtonLabels();
+        renderActiveFilters();
+        loadProducts();
+      };
+      minEl.addEventListener('change', commit);
+      maxEl.addEventListener('change', commit);
+    }
+
+    function syncPriceSliders(sourceId) {
+      const pairs = [['price-min-desktop','price-max-desktop','price-fill-desktop','price-label-desktop'],
+                     ['price-min-mobile','price-max-mobile','price-fill-mobile','price-label-mobile']];
+      pairs.forEach(([minId, maxId, fillId, labelId]) => {
+        if (minId === sourceId) return;
+        const minEl = document.getElementById(minId), maxEl = document.getElementById(maxId);
+        minEl.value = priceMin; maxEl.value = priceMax;
+        const range = priceBounds.max - priceBounds.min || 1;
+        const leftPct = ((priceMin - priceBounds.min) / range) * 100;
+        const rightPct = ((priceMax - priceBounds.min) / range) * 100;
+        document.getElementById(fillId).style.left = leftPct + '%';
+        document.getElementById(fillId).style.width = (rightPct - leftPct) + '%';
+        document.getElementById(labelId).textContent = `₹${priceMin} — ₹${priceMax}`;
+      });
+    }
+
+    // ─── Dropdowns ────────────────────────────────────────────────────
+    function toggleDropdown(name) {
+      const panel = document.getElementById(`panel-${name}`);
+      const btn = document.getElementById(`btn-${name}`);
+      const isOpen = panel.classList.contains('open');
+      closeAllDropdowns();
+      if (!isOpen) { panel.classList.add('open'); btn.classList.add('open'); }
+    }
+    function closeAllDropdowns() {
+      document.querySelectorAll('.filter-panel').forEach(p => p.classList.remove('open'));
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('open'));
+    }
+
+    // ─── Search ───────────────────────────────────────────────────────
+    const debouncedSearch = debounce(() => { loadProducts(); }, 400);
+    function onSearchInput() {
+      const input = document.getElementById('search-input');
+      searchTerm = input.value.trim();
+      document.getElementById('search-clear-btn').classList.toggle('show', searchTerm.length > 0);
+      renderActiveFilters();
+      debouncedSearch();
+    }
+    function clearSearch() {
+      document.getElementById('search-input').value = '';
+      searchTerm = '';
+      document.getElementById('search-clear-btn').classList.remove('show');
+      renderActiveFilters();
+      loadProducts();
+    }
+
+    // ─── Sort / On sale ────────────────────────────────────────────────
+    function onSortChange(val) {
+      sortValue = val;
+      document.getElementById('sort-desktop').value = val;
+      document.getElementById('sort-mobile').value = val;
+      loadProducts();
+    }
+    function onOnSaleChange(checked) {
+      onSaleOnly = checked;
+      document.getElementById('onsale-desktop').checked = checked;
+      document.getElementById('onsale-mobile').checked = checked;
+      renderActiveFilters();
+      loadProducts();
+    }
+
+    // ─── Filter button labels ───────────────────────────────────────────
+    function updateFilterButtonLabels() {
+      document.getElementById('btn-price-label').textContent =
+        priceTouched && (priceMin > priceBounds.min || priceMax < priceBounds.max) ? `Price (₹${priceMin}-₹${priceMax})` : 'Price';
+      document.getElementById('btn-price').classList.toggle('active-count', priceTouched && (priceMin > priceBounds.min || priceMax < priceBounds.max));
+
+      document.getElementById('btn-size-label').textContent = selectedSizes.size ? `Size (${selectedSizes.size})` : 'Size';
+      document.getElementById('btn-size').classList.toggle('active-count', selectedSizes.size > 0);
+
+      document.getElementById('btn-color-label').textContent = selectedColors.size ? `Color (${selectedColors.size})` : 'Color';
+      document.getElementById('btn-color').classList.toggle('active-count', selectedColors.size > 0);
+    }
+
+    // ─── Active filter tags ─────────────────────────────────────────────
+    function renderActiveFilters() {
+      const tags = [];
+      if (searchTerm) tags.push({ label: `Search: ${searchTerm}`, remove: clearSearch });
+      selectedSizes.forEach(s => tags.push({ label: `Size: ${s}`, remove: () => toggleSize(s) }));
+      selectedColors.forEach(c => tags.push({ label: `Color: ${c}`, remove: () => toggleColor(c) }));
+      if (priceTouched && (priceMin > priceBounds.min || priceMax < priceBounds.max)) {
+        tags.push({ label: `Price: ₹${priceMin}-₹${priceMax}`, remove: resetPrice });
+      }
+      if (onSaleOnly) tags.push({ label: 'On Sale', remove: () => onOnSaleChange(false) });
+
+      const container = document.getElementById('active-filters');
+      if (!tags.length) { container.classList.remove('show'); container.innerHTML = ''; return; }
+      container.classList.add('show');
+
+      const MAX_VISIBLE = 8; // ~2 rows
+      const visible = tags.slice(0, MAX_VISIBLE);
+      const extra = tags.length - visible.length;
+
+      window.__activeFilterActions = visible.map(t => t.remove);
+      let html = visible.map((t, i) => `
+        <span class="active-tag">${t.label} <button onclick="window.__activeFilterActions[${i}]()">×</button></span>
+      `).join('');
+      if (extra > 0) html += `<span class="active-tag">+${extra} more</span>`;
+      html += `<button class="clear-all-btn" onclick="resetAllFilters()">Clear All</button>`;
+      container.innerHTML = html;
+    }
+
+    function resetPrice() {
+      priceMin = priceBounds.min;
+      priceMax = priceBounds.max;
+      priceTouched = false;
+      syncPriceSliders(null);
+      updateFilterButtonLabels();
+      renderActiveFilters();
+      loadProducts();
+    }
+
+    function resetAllFilters() {
+      searchTerm = '';
+      document.getElementById('search-input').value = '';
+      document.getElementById('search-clear-btn').classList.remove('show');
+      selectedSizes.clear();
+      selectedColors.clear();
+      onSaleOnly = false;
+      document.getElementById('onsale-desktop').checked = false;
+      document.getElementById('onsale-mobile').checked = false;
+      priceMin = priceBounds.min;
+      priceMax = priceBounds.max;
+      priceTouched = false;
+      syncPriceSliders(null);
+      renderSizeChips();
+      renderColorChips();
+      updateFilterButtonLabels();
+      renderActiveFilters();
+      loadProducts();
+    }
+
+    // ─── Mobile bottom sheet ─────────────────────────────────────────────
+    function openMobileSheet() {
+      document.getElementById('sheet-overlay').classList.add('show');
+      document.getElementById('bottom-sheet').classList.add('show');
+    }
+    function closeMobileSheet() {
+      document.getElementById('sheet-overlay').classList.remove('show');
+      document.getElementById('bottom-sheet').classList.remove('show');
+    }
+
+    // ─── Load products ───────────────────────────────────────────────────
     async function loadProducts() {
+      closeAllDropdowns();
       const grid = document.getElementById('products-grid');
       skeletonCards(grid, 8);
-      const sort = document.getElementById('sort').value;
+
       const params = new URLSearchParams({ gender: currentGender });
       if (currentCat) params.set('category', currentCat);
-      if (sort) params.set('sort', sort);
+      if (sortValue) params.set('sort', sortValue);
+      if (searchTerm) params.set('search', searchTerm);
+      if (selectedSizes.size) params.set('sizes', Array.from(selectedSizes).join(','));
+      if (selectedColors.size) params.set('colors', Array.from(selectedColors).join(','));
+      if (priceTouched) {
+        params.set('min_price', priceMin);
+        params.set('max_price', priceMax);
+      }
+      if (onSaleOnly) params.set('on_sale', 'true');
+
       try {
         const products = await apiFetch(`/api/products/?${params}`);
         const info = document.getElementById('results-info');
         info.textContent = `${products.length} item${products.length !== 1 ? 's' : ''}`;
         if (!products.length) {
-          grid.innerHTML = `<div class="empty-state"><svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><h3>No items found</h3><p>Try a different category or check back later</p></div>`;
+          grid.innerHTML = `<div class="empty-state"><svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><h3>No products match your filters</h3><p>Try removing some filters</p></div>`;
           return;
         }
         grid.innerHTML = products.map(p => renderProductCard(p)).join('');
@@ -311,8 +958,14 @@
     function switchGender(gender) {
       currentGender = gender;
       currentCat = null;
+      selectedSizes.clear();
+      selectedColors.clear();
+      priceTouched = false;
       updateGenderUI();
+      updateFilterButtonLabels();
+      renderActiveFilters();
       loadCategories();
+      loadFilterOptions();
       loadProducts();
     }
 
