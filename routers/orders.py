@@ -48,6 +48,25 @@ def _is_auto_ship_enabled() -> bool:
         return False
 
 
+def get_delivery_fee() -> float:
+    """
+    Reads the admin-configured delivery fee from the settings table.
+    Defaults to 0 if not set or unreadable, so checkout never breaks.
+    """
+    try:
+        res = supabase_admin.table("settings").select("value").eq("key", "delivery_fee").maybe_single().execute()
+        return float(res.data.get("value", 0)) if res.data and res.data.get("value") else 0.0
+    except Exception as e:
+        logger.warning(f"Could not read delivery_fee setting, defaulting to 0: {e}")
+        return 0.0
+
+
+@router.get("/delivery-fee")
+async def public_delivery_fee():
+    """Public (no-auth) endpoint the checkout page reads to show the delivery fee."""
+    return {"delivery_fee": get_delivery_fee()}
+
+
 def create_shipment_for_order(order: dict) -> dict | None:
     """
     Fetches the order's shopkeeper and calls NimbusPost to create a
@@ -123,6 +142,10 @@ async def create_order(order: OrderRequest, request: Request):
     if not prod or prod["stock"] < 1:
         raise HTTPException(status_code=400, detail="Product out of stock")
 
+    # Delivery fee is frozen at order-creation time (from the admin setting)
+    # so later changes to the setting never alter an existing order's total.
+    delivery_fee = get_delivery_fee()
+
     # Create order
     try:
         order_data = {
@@ -140,6 +163,7 @@ async def create_order(order: OrderRequest, request: Request):
             "shopkeeper_id": prod["shopkeeper_id"],
             "shopkeeper_code": prod["shopkeeper_code"],
             "payment_type": "upi",
+            "delivery_fee": delivery_fee,
             "agent_state": {}
         }
         res = supabase_admin.table("orders").insert(order_data).execute()
@@ -155,6 +179,12 @@ async def create_order(order: OrderRequest, request: Request):
     except Exception as e:
         logger.warning(f"Stock update failed for {order.product_id}: {e}")
 
+    total_amount = prod["our_price"] + delivery_fee
+    price_lines = (
+        f"Price: ₹{prod['our_price']:.0f}\n"
+        f"Delivery: ₹{delivery_fee:.0f}\n"
+        f"Total: ₹{total_amount:.0f}\n\n"
+    ) if delivery_fee else f"Price: ₹{prod['our_price']:.0f}\n\n"
 
     return {
         "success": True,
@@ -165,7 +195,7 @@ async def create_order(order: OrderRequest, request: Request):
             f"Product: {prod['name']}\n"
             f"Code: {prod['shopkeeper_code']}\n"
             f"Size: {order.size} | Color: {order.color}\n"
-            f"Price: ₹{prod['our_price']:.0f}\n\n"
+            f"{price_lines}"
             f"👤 Customer Details:\n"
             f"Name: {order.customer_name}\n"
             f"Phone: {order.customer_phone}\n"
@@ -225,14 +255,17 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
             tracking_url = f"https://www.delhivery.com/track/package/{update.tracking_id}"
             send_text(phone, msg_shipped(order["product_name"], courier, update.tracking_id, tracking_url))
 
+        delivery_fee = order.get("delivery_fee") or 0
+        total_amount = order.get("total_amount") or (order["our_price"] + delivery_fee)
+
         if update.status == "confirmed" and order.get("payment_type") == "upi" and update.payment_status == "verified":
             from utils.whatsapp_utils import msg_payment_confirmed
             send_text(phone, msg_payment_confirmed(
-                order["product_name"], order["size"], order["color"], order["our_price"]
+                order["product_name"], order["size"], order["color"], total_amount, delivery_fee
             ))
 
         if update.refund_status == "processed":
-            send_text(phone, msg_refund_processed(order["our_price"]))
+            send_text(phone, msg_refund_processed(total_amount))
 
         # NimbusPost auto-ship: only fires when payment is verified on a
         # confirmed order and the auto-mode setting is turned on. In manual

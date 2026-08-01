@@ -19,6 +19,16 @@ router = APIRouter()
 WPP_API_KEY = os.getenv("WPP_API_KEY", "")
 
 
+def order_total(order: dict) -> float:
+    """
+    Amount the customer actually owes: item price + delivery fee.
+    Falls back to computing it manually if the generated total_amount
+    column isn't present yet (e.g. migration not run).
+    """
+    delivery_fee = order.get("delivery_fee") or 0
+    return order.get("total_amount") or (order["our_price"] + delivery_fee)
+
+
 def normalize_phone(phone: str) -> str:
     phone = phone.strip().replace(" ", "").replace("-", "").replace("+", "")
     if phone.startswith("91") and len(phone) == 12:
@@ -183,7 +193,7 @@ async def whatsapp_webhook(request: Request):
             send_text(full_phone, msg_cannot_cancel(order.get("tracking_id", "N/A")))
         else:
             await set_agent_state(order["id"], {"awaiting": "cancel_confirm"})
-            send_text(full_phone, msg_cancel_confirm(order["product_name"], order["our_price"]))
+            send_text(full_phone, msg_cancel_confirm(order["product_name"], order_total(order)))
         return {"status": "ok"}
 
     # HELP is an explicit override command that always works.
@@ -201,12 +211,15 @@ async def whatsapp_webhook(request: Request):
     # Awaiting payment choice (1 = UPI, 2 = COD)
     if awaiting == "payment_choice":
         if body_text in ("1", "UPI"):
-            send_upi_qr(full_phone, order["id"], order["our_price"])
+            send_upi_qr(full_phone, order["id"], order_total(order))
             import asyncio; await asyncio.sleep(1)
             send_text(full_phone, msg_upi_qr_followup())
             await set_agent_state(order["id"], {"awaiting": "screenshot"})
         elif body_text in ("2", "COD"):
-            send_text(full_phone, msg_cod_confirmed(order["product_name"], order["size"], order["color"], order["our_price"]))
+            send_text(full_phone, msg_cod_confirmed(
+                order["product_name"], order["size"], order["color"],
+                order_total(order), order.get("delivery_fee") or 0
+            ))
             supabase_admin.table("orders").update({"payment_type": "cod", "status": "confirmed"}).eq("id", order["id"]).execute()
             await set_agent_state(order["id"], {})
         else:
@@ -228,7 +241,7 @@ async def whatsapp_webhook(request: Request):
     if awaiting == "cancel_confirm":
         if body_text == "YES":
             if order["payment_type"] == "upi" and order["payment_status"] in ("received", "verified"):
-                send_text(full_phone, msg_cancelled_upi(order["our_price"]))
+                send_text(full_phone, msg_cancelled_upi(order_total(order)))
                 supabase_admin.table("orders").update({"status": "cancelled", "refund_status": "pending"}).eq("id", order["id"]).execute()
                 logger.warning(f"Order cancellation: {order['id']}, refund pending")
             else:
@@ -262,7 +275,7 @@ async def whatsapp_webhook(request: Request):
         await set_agent_state(order["id"], {"awaiting": "payment_choice"})
         send_text(full_phone, msg_order_received(
             order["customer_name"], order["product_name"],
-            order["size"], order["color"], order["our_price"]
+            order["size"], order["color"], order_total(order), order.get("delivery_fee") or 0
         ))
         return {"status": "ok"}
 

@@ -61,6 +61,19 @@
         </label>
       </div>
 
+      <!-- Delivery fee setting -->
+      <div class="stat-card" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-weight:700">Delivery Fee</div>
+          <div style="color:var(--muted);font-size:0.85rem">Charged to the customer on top of the product price. Shown separately on the checkout page and included in the WhatsApp payment amount.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-weight:600">₹</span>
+          <input type="number" id="delivery-fee-input" class="form-control" style="width:100px" min="0" step="1" placeholder="e.g. 50">
+          <button class="btn btn-primary btn-sm" onclick="saveDeliveryFee()">Save</button>
+        </div>
+      </div>
+
       <!-- Recent Orders -->
       <div class="page-header" style="margin-bottom:16px;margin-top:24px">
         <h2>📦 Recent Orders</h2>
@@ -191,6 +204,33 @@ async function toggleAutoShip() {
   }
 }
 
+async function loadDeliveryFee() {
+  try {
+    const setting = await apiFetch("/api/admin/settings/delivery_fee");
+    document.getElementById("delivery-fee-input").value = setting.value || "0";
+  } catch(e) {
+    // Setting may not exist yet — leave input blank, no error shown to admin
+  }
+}
+
+async function saveDeliveryFee() {
+  const input = document.getElementById("delivery-fee-input");
+  const value = parseFloat(input.value);
+  if (isNaN(value) || value < 0) {
+    showToast("Enter a valid delivery fee", "error");
+    return;
+  }
+  try {
+    await apiFetch("/api/admin/settings/delivery_fee", {
+      method: "PUT",
+      body: JSON.stringify({ value: String(value) })
+    });
+    showToast(`Delivery fee set to ₹${value} ✅`);
+  } catch(e) {
+    showToast("Failed to save delivery fee", "error");
+  }
+}
+
 async function logout() {
   await apiFetch("/api/auth/logout", { method: "POST" });
   window.location = "/admin/login";
@@ -198,6 +238,7 @@ async function logout() {
 
 loadDashboard();
 loadAutoShipSetting();
+loadDeliveryFee();
 </script>
 </body>
 </html>
