@@ -38,6 +38,32 @@
     .gender-opt.selected-girls { border-color: #EC4899; background: #FDF2F8; color: #BE185D; }
     .gender-opt.selected-boys { border-color: #3B82F6; background: #EFF6FF; color: #1D4ED8; }
     .gender-opt:hover { border-color: var(--primary); }
+
+    /* ─── Size Chart ─────────────────────────────────────── */
+    .size-chart-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 10px; }
+    #size-chart-table { width: 100%; border-collapse: collapse; }
+    #size-chart-table th, #size-chart-table td { border-bottom: 1px solid var(--border); padding: 0; }
+    #size-chart-table th {
+      background: #FAFAFA; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--muted); text-align: left; padding: 8px 10px; white-space: nowrap;
+    }
+    #size-chart-table td { vertical-align: middle; }
+    #size-chart-table tr:last-child td { border-bottom: none; }
+    #size-chart-table input {
+      width: 100%; border: none; padding: 8px 10px; font-size: 0.85rem; font-family: inherit;
+      background: transparent; color: var(--black);
+    }
+    #size-chart-table input:focus { outline: 2px solid var(--primary-light); outline-offset: -2px; background: #fff; }
+    #size-chart-table .col-remove { width: 36px; text-align: center; }
+    #size-chart-table .row-remove-btn {
+      border: none; background: none; color: var(--danger); cursor: pointer; font-size: 1rem; line-height: 1;
+      padding: 4px 8px;
+    }
+    #size-chart-table .col-remove-btn {
+      border: none; background: none; color: var(--danger); cursor: pointer; font-size: 0.9rem; line-height: 1;
+    }
+    .size-chart-actions { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+    .size-chart-empty { font-size: 0.82rem; color: var(--muted); padding: 14px; text-align: center; }
   </style>
 </head>
 <body>
@@ -169,6 +195,43 @@
         <input class="form-control" name="colors_raw" placeholder="e.g. Red, Black, White, Navy Blue">
       </div>
 
+      <!-- Size Chart (optional) -->
+      <div class="form-group">
+        <label class="form-label">Size Chart <span style="color:var(--muted);font-weight:400;font-size:0.82rem">— optional, shows a "Size Guide" popup to customers</span></label>
+
+        <div class="form-row" style="margin-bottom:10px">
+          <div class="form-group" style="margin-bottom:0">
+            <select class="form-control" id="size-chart-type-select" onchange="loadSizeChartPreset(this.value)">
+              <option value="">Select chart type to auto-fill...</option>
+              <option value="tshirt">T-Shirt / Top</option>
+              <option value="shirt">Shirt</option>
+              <option value="pants">Pants / Jeans</option>
+              <option value="kurti">Kurti / Dress</option>
+              <option value="saree">Saree</option>
+              <option value="custom">Custom (blank)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="size-chart-editor" style="display:none">
+          <div class="size-chart-table-wrap">
+            <table id="size-chart-table">
+              <thead id="size-chart-thead"></thead>
+              <tbody id="size-chart-tbody"></tbody>
+            </table>
+          </div>
+          <div class="size-chart-actions">
+            <button type="button" class="btn btn-outline btn-sm" onclick="addSizeChartRow()">+ Add Row</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="addSizeChartColumn()">+ Add Column</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="clearSizeChart()">Clear Size Chart</button>
+          </div>
+        </div>
+        <div id="size-chart-empty-msg" class="size-chart-empty">No size chart added. Select a chart type above to get started.</div>
+
+        <input type="hidden" name="size_chart" id="size-chart-hidden">
+        <input type="hidden" name="clear_size_chart" id="clear-size-chart-hidden" value="false">
+      </div>
+
       <!-- Stock + Shopkeeper -->
       <div class="form-row">
         <div class="form-group">
@@ -210,6 +273,188 @@
 <script>
 let editingId = null;
 let selectedSizes = [];
+
+// ─── SIZE CHART ─────────────────────────────────────────────────────────────
+const SIZE_CHART_PRESETS = {
+  tshirt: {
+    columns: ["Size", "Chest", "Shoulder", "Length"],
+    rows: [
+      ["S", "38", "16.5", "27.5"],
+      ["M", "40", "17", "28.2"],
+      ["L", "42", "17.5", "29"],
+      ["XL", "44", "18", "29.8"],
+      ["2XL", "46.5", "18.8", "30.5"],
+      ["3XL", "49", "19.5", "31.2"]
+    ]
+  },
+  shirt: {
+    columns: ["Size", "Chest", "Shoulder", "Length"],
+    rows: [
+      ["S", "40.8", "17.2", "29.6"],
+      ["M", "42.8", "18", "30"],
+      ["L", "44.8", "18.8", "30.4"],
+      ["XL", "47.2", "19.5", "31.1"],
+      ["2XL", "49.8", "20.2", "31.4"],
+      ["3XL", "52.2", "21", "31.6"]
+    ]
+  },
+  pants: {
+    columns: ["Size", "Waist", "Length"],
+    rows: [
+      ["28", "28", "41"],
+      ["30", "30", "41"],
+      ["32", "32", "41"],
+      ["34", "34", "41"],
+      ["36", "36", "41"],
+      ["38", "38", "41"],
+      ["40", "40", "41"],
+      ["42", "42", "41"]
+    ]
+  },
+  kurti: {
+    columns: ["Size", "Chest", "Waist", "Hip", "Length"],
+    rows: [
+      ["S", "36", "30", "38", "44"],
+      ["M", "38", "32", "40", "44"],
+      ["L", "40", "34", "42", "45"],
+      ["XL", "42", "36", "44", "45"],
+      ["2XL", "44", "38", "46", "46"],
+      ["3XL", "46", "40", "48", "46"]
+    ]
+  },
+  saree: {
+    columns: ["Size", "Length", "Blouse"],
+    rows: [
+      ["Free Size", "5.5m", "0.8m"]
+    ]
+  },
+  custom: {
+    columns: ["Size", "Measurement"],
+    rows: [["", ""]]
+  }
+};
+
+function loadSizeChartPreset(type) {
+  if (!type) {
+    hideSizeChartEditor();
+    return;
+  }
+  const preset = SIZE_CHART_PRESETS[type];
+  renderSizeChartTable(preset.columns, preset.rows.map(r => [...r]));
+  showSizeChartEditor();
+}
+
+function showSizeChartEditor() {
+  document.getElementById('size-chart-editor').style.display = 'block';
+  document.getElementById('size-chart-empty-msg').style.display = 'none';
+}
+
+function hideSizeChartEditor() {
+  document.getElementById('size-chart-editor').style.display = 'none';
+  document.getElementById('size-chart-empty-msg').style.display = 'block';
+  document.getElementById('size-chart-thead').innerHTML = '';
+  document.getElementById('size-chart-tbody').innerHTML = '';
+}
+
+function renderSizeChartTable(columns, rows) {
+  const thead = document.getElementById('size-chart-thead');
+  const tbody = document.getElementById('size-chart-tbody');
+
+  thead.innerHTML = '<tr>' + columns.map((col, ci) => `
+    <th>
+      <input type="text" value="${escapeAttr(col)}" data-col-header="${ci}">
+      ${ci > 0 ? `<button type="button" class="col-remove-btn" onclick="removeSizeChartColumn(${ci})" title="Remove column">✕</button>` : ''}
+    </th>
+  `).join('') + '<th class="col-remove"></th></tr>';
+
+  tbody.innerHTML = rows.map((row, ri) => `
+    <tr>
+      ${row.map((cell, ci) => `<td><input type="text" value="${escapeAttr(cell)}" data-row="${ri}" data-col="${ci}"></td>`).join('')}
+      <td class="col-remove"><button type="button" class="row-remove-btn" onclick="removeSizeChartRow(${ri})" title="Remove row">✕</button></td>
+    </tr>
+  `).join('');
+}
+
+function escapeAttr(str) {
+  return String(str ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function collectSizeChartTable() {
+  const headerInputs = document.querySelectorAll('#size-chart-thead input[data-col-header]');
+  const columns = Array.from(headerInputs).map(inp => inp.value.trim() || 'Column');
+
+  const rowMap = {};
+  document.querySelectorAll('#size-chart-tbody input[data-row]').forEach(inp => {
+    const r = inp.dataset.row, c = parseInt(inp.dataset.col, 10);
+    if (!rowMap[r]) rowMap[r] = [];
+    rowMap[r][c] = inp.value;
+  });
+  const rows = Object.keys(rowMap).sort((a, b) => a - b).map(r => {
+    const row = rowMap[r];
+    return columns.map((_, ci) => row[ci] ?? '');
+  });
+  return { columns, rows };
+}
+
+function addSizeChartRow() {
+  const data = collectSizeChartTable();
+  data.rows.push(new Array(data.columns.length).fill(''));
+  renderSizeChartTable(data.columns, data.rows);
+}
+
+function addSizeChartColumn() {
+  const name = prompt('Column name (e.g. Hip, Sleeve):');
+  if (!name) return;
+  const data = collectSizeChartTable();
+  data.columns.push(name.trim());
+  data.rows.forEach(r => r.push(''));
+  renderSizeChartTable(data.columns, data.rows);
+}
+
+function removeSizeChartRow(idx) {
+  const data = collectSizeChartTable();
+  data.rows.splice(idx, 1);
+  renderSizeChartTable(data.columns, data.rows);
+}
+
+function removeSizeChartColumn(idx) {
+  if (idx === 0) return; // keep the Size column
+  const data = collectSizeChartTable();
+  data.columns.splice(idx, 1);
+  data.rows.forEach(r => r.splice(idx, 1));
+  renderSizeChartTable(data.columns, data.rows);
+}
+
+function clearSizeChart() {
+  document.getElementById('size-chart-type-select').value = '';
+  hideSizeChartEditor();
+}
+
+function loadSizeChartFromProduct(chart) {
+  if (chart && chart.columns && chart.columns.length && chart.rows) {
+    renderSizeChartTable(chart.columns, chart.rows.map(r => [...r]));
+    showSizeChartEditor();
+    document.getElementById('size-chart-type-select').value = chart.type || '';
+  } else {
+    document.getElementById('size-chart-type-select').value = '';
+    hideSizeChartEditor();
+  }
+}
+
+function syncSizeChartHidden() {
+  const editorVisible = document.getElementById('size-chart-editor').style.display !== 'none';
+  const hiddenField = document.getElementById('size-chart-hidden');
+  const clearField = document.getElementById('clear-size-chart-hidden');
+  if (editorVisible) {
+    const data = collectSizeChartTable();
+    data.type = document.getElementById('size-chart-type-select').value || 'custom';
+    hiddenField.value = JSON.stringify(data);
+    clearField.value = 'false';
+  } else {
+    hiddenField.value = '';
+    clearField.value = editingId ? 'true' : 'false';
+  }
+}
 
 // ─── SIZE PRESETS ──────────────────────────────────────────────────────────
 const SIZE_PRESETS = {
@@ -409,6 +654,9 @@ function openModal() {
   document.getElementById("modal-alert").innerHTML = "";
   selectGender('Girls');
   loadSizePreset('standard', document.querySelector('.size-type-tab'));
+  clearSizeChart();
+  document.getElementById("size-chart-hidden").value = "";
+  document.getElementById("clear-size-chart-hidden").value = "false";
   loadShopkeeperDropdown();
   document.getElementById("product-modal").classList.add("open");
 }
@@ -454,6 +702,15 @@ function openEdit(p) {
     document.getElementById("img-preview").src = p.image;
     document.getElementById("img-preview").style.display = "block";
   }
+
+  // Size chart
+  let sizeChart = p.size_chart;
+  if (typeof sizeChart === 'string' && sizeChart) {
+    try { sizeChart = JSON.parse(sizeChart); } catch(e) { sizeChart = null; }
+  }
+  loadSizeChartFromProduct(sizeChart);
+  document.getElementById("clear-size-chart-hidden").value = "false";
+
   loadShopkeeperDropdown(p.shopkeeper_id);
   document.getElementById("product-modal").classList.add("open");
 }
@@ -482,6 +739,8 @@ document.getElementById("product-form").addEventListener("submit", async functio
     return;
   }
 
+  syncSizeChartHidden();
+
   const fd = new FormData(this);
   const colorsRaw = fd.get("colors_raw") || "";
   fd.delete("colors_raw");
@@ -490,6 +749,7 @@ document.getElementById("product-form").addEventListener("submit", async functio
   fd.set("featured", document.getElementById("featured-cb").checked);
   fd.set("gender", document.getElementById("gender-val").value);
   fd.delete("sizes_raw");
+  if (!fd.get("size_chart")) fd.delete("size_chart");
 
   try {
     const url = editingId ? `/api/products/admin/${editingId}` : "/api/products/admin/add";

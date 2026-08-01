@@ -304,6 +304,95 @@
     @media (max-width: 420px) {
       .info-tiles { grid-template-columns: 1fr; }
     }
+
+    /* ─── SIZE GUIDE ──────────────────────────────────────── */
+    .size-guide-btn {
+      display: none;
+      align-items: center;
+      gap: 5px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font-body);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #0A0A0A;
+      padding: 0;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-color: #C0C0C0;
+      transition: color 0.2s, text-decoration-color 0.2s;
+    }
+    .size-guide-btn:hover { color: #0A0A0A; text-decoration-color: #0A0A0A; }
+
+    .size-guide-modal .modal {
+      max-width: 560px;
+    }
+    .size-guide-note {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+    .size-guide-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 24px;
+    }
+    .size-guide-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.84rem;
+    }
+    .size-guide-table th {
+      background: #F5F5F5;
+      text-align: left;
+      padding: 10px 14px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border);
+    }
+    .size-guide-table td {
+      padding: 10px 14px;
+      color: #0A0A0A;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .size-guide-table tr:last-child td { border-bottom: none; }
+    .size-guide-table td:first-child { font-weight: 600; }
+
+    .size-guide-tips {
+      background: #F5F5F5;
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+    .size-guide-tips h5 {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #0A0A0A;
+      margin-bottom: 10px;
+    }
+    .size-guide-tips ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .size-guide-tips li {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 6px;
+    }
+    .size-guide-tips li:last-child { margin-bottom: 0; }
+    .size-guide-tips li strong { color: #0A0A0A; }
   </style>
 </head>
 <body>
@@ -388,6 +477,7 @@
         <div class="selector-section" id="size-section">
           <div class="selector-label">
             <span>Select Size</span>
+            <button type="button" class="size-guide-btn" id="size-guide-btn" onclick="openSizeGuide()">📏 Size Guide</button>
           </div>
           <div class="chip-group" id="size-chips"></div>
         </div>
@@ -478,6 +568,30 @@
     <p class="footer-copy">© 2025 Clothyk. All rights reserved.</p>
   </footer>
 
+  <!-- Size Guide Modal -->
+  <div class="modal-overlay size-guide-modal" id="size-guide-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="size-guide-title">Size Guide</h3>
+        <button class="modal-close" onclick="closeSizeGuide()">
+          <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p class="size-guide-note">All measurements are in inches</p>
+      <div class="size-guide-table-wrap">
+        <table class="size-guide-table" id="size-guide-table"></table>
+      </div>
+      <div class="size-guide-tips">
+        <h5>How to Measure</h5>
+        <ul>
+          <li><strong>Chest:</strong> Measure around the fullest part of your chest</li>
+          <li><strong>Waist:</strong> Measure around your natural waistline</li>
+          <li><strong>Length:</strong> Measure from shoulder to hem</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
   <div id="toast-container"></div>
   <script src="/static/js/shared.js"></script>
   <script>
@@ -528,6 +642,18 @@
           const badge = document.getElementById("stock-badge");
           badge.textContent = "Out of Stock";
           badge.className = "badge badge-danger";
+        }
+
+        // Size Guide button
+        let sizeChart = product.size_chart;
+        if (typeof sizeChart === 'string' && sizeChart) {
+          try { sizeChart = JSON.parse(sizeChart); } catch(e) { sizeChart = null; }
+        }
+        const guideBtn = document.getElementById("size-guide-btn");
+        if (sizeChart && Array.isArray(sizeChart.columns) && sizeChart.columns.length && Array.isArray(sizeChart.rows) && sizeChart.rows.length) {
+          guideBtn.style.display = "inline-flex";
+        } else {
+          guideBtn.style.display = "none";
         }
 
         // Sizes
@@ -612,6 +738,30 @@
         svg.style.fill = inWishlist ? "#0A0A0A" : "none";
         svg.style.stroke = inWishlist ? "#0A0A0A" : "#6B6B6B";
       }
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function openSizeGuide() {
+      let sizeChart = product?.size_chart;
+      if (typeof sizeChart === 'string' && sizeChart) {
+        try { sizeChart = JSON.parse(sizeChart); } catch(e) { sizeChart = null; }
+      }
+      if (!sizeChart || !Array.isArray(sizeChart.columns) || !Array.isArray(sizeChart.rows)) return;
+
+      document.getElementById("size-guide-title").textContent = `Size Guide — ${product.name}`;
+
+      const thead = `<thead><tr>${sizeChart.columns.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>`;
+      const tbody = `<tbody>${sizeChart.rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody>`;
+      document.getElementById("size-guide-table").innerHTML = thead + tbody;
+
+      document.getElementById("size-guide-modal").classList.add("open");
+    }
+
+    function closeSizeGuide() {
+      document.getElementById("size-guide-modal").classList.remove("open");
     }
 
     async function loadRelated() {

@@ -12,7 +12,7 @@ from utils.auth_utils import require_admin
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-SAFE_FIELDS = "id,name,description,our_price,mrp,sizes,colors,image,category,gender,featured,stock,shopkeeper_code,view_count,created_at"
+SAFE_FIELDS = "id,name,description,our_price,mrp,sizes,colors,image,category,gender,featured,stock,shopkeeper_code,view_count,created_at,size_chart"
 
 
 # ─── PUBLIC ENDPOINTS ─────────────────────────────────────────────────────
@@ -144,6 +144,7 @@ async def add_product(
     stock: int = Form(1),
     mrp: float = Form(None),
     shopkeeper_id: int = Form(...),
+    size_chart: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     admin=Depends(require_admin)
 ):
@@ -175,7 +176,8 @@ async def add_product(
             "stock": stock,
             "shopkeeper_id": shopkeeper_id,
             "shopkeeper_code": shopkeeper_code,
-            "image": image_url
+            "image": image_url,
+            "size_chart": json.loads(size_chart) if size_chart else None
         }
         res = supabase_admin.table("products").insert(product).execute()
         await cache_clear_pattern("products:*")
@@ -203,6 +205,8 @@ async def edit_product(
     stock: int = Form(None),
     mrp: float = Form(None),
     shopkeeper_id: int = Form(None),
+    size_chart: Optional[str] = Form(None),
+    clear_size_chart: Optional[bool] = Form(False),
     image: Optional[UploadFile] = File(None),
     admin=Depends(require_admin)
 ):
@@ -222,6 +226,10 @@ async def edit_product(
         if shopkeeper_id is not None:
             updates["shopkeeper_id"] = shopkeeper_id
             updates["shopkeeper_code"] = f"#{shopkeeper_id:03d}"
+        if clear_size_chart:
+            updates["size_chart"] = None
+        elif size_chart is not None:
+            updates["size_chart"] = json.loads(size_chart) if size_chart else None
 
         if image and image.filename:
             contents = await image.read()
