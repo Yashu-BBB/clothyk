@@ -23,7 +23,8 @@ from utils.cache import init_redis, close_redis
 # ─── Logging ───────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s | %(levelname)-7s | %(filename)s:%(lineno)d | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,18 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Clothyk", lifespan=lifespan, docs_url=None, redoc_url=None)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ─── Global Exception Handler ──────────────────────────────────────────────
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(
+        f"Unhandled exception on {request.method} {request.url.path}: {exc}",
+        exc_info=True
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error. We are looking into it."}
+    )
 
 ALLOWED_ORIGINS = [
     "https://clothyk.up.railway.app",
@@ -98,6 +111,16 @@ async def track_and_protect(request: Request, call_next):
 
     if duration > 2:
         logger.warning(f"Slow Supabase/response: {path} took {duration:.2f}s")
+
+    # Request logging
+    cache_tag = " [CACHE HIT]" if response.headers.get("X-Cache") == "HIT" else ""
+    log_line = f"{request.method} {path} → {response.status_code} ({duration:.2f}s){cache_tag}"
+    if response.status_code >= 500:
+        logger.error(log_line)
+    elif response.status_code >= 400:
+        logger.warning(log_line)
+    else:
+        logger.info(log_line)
 
     return response
 

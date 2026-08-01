@@ -52,7 +52,7 @@ async def list_products(
         await cache_set(cache_key, data, ttl=900)
         return data
     except Exception as e:
-        logger.error(f"Failed to fetch products: {e}")
+        logger.error(f"Failed to fetch products: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch products")
 
 
@@ -67,7 +67,7 @@ async def featured_products():
         await cache_set("products:featured", data, ttl=900)
         return data
     except Exception as e:
-        logger.error(f"Failed to fetch featured products: {e}")
+        logger.error(f"Failed to fetch featured products: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch products")
 
 
@@ -82,7 +82,7 @@ async def list_categories():
         await cache_set("products:categories", cats, ttl=1800)
         return cats
     except Exception as e:
-        logger.error(f"Failed to fetch categories: {e}")
+        logger.error(f"Failed to fetch categories: {e}", exc_info=True)
         return []
 
 
@@ -98,7 +98,7 @@ async def get_product(product_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to fetch product {product_id}: {e}")
+        logger.error(f"Failed to fetch product {product_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch product")
 
 
@@ -114,7 +114,7 @@ async def related_products(product_id: str):
         res = q.execute()
         return res.data or []
     except Exception as e:
-        logger.error(f"Failed related products: {e}")
+        logger.error(f"Failed related products: {e}", exc_info=True)
         return []
 
 
@@ -126,7 +126,7 @@ async def admin_list_products(admin=Depends(require_admin)):
         res = supabase_admin.table("products").select("*").order("created_at", desc=True).execute()
         return res.data or []
     except Exception as e:
-        logger.error(f"Admin: failed to list products: {e}")
+        logger.error(f"Admin: failed to list products: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch products")
 
 
@@ -184,7 +184,7 @@ async def add_product(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to add product: {e}")
+        logger.error(f"Failed to add product: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to add product: {str(e)}")
 
 
@@ -235,7 +235,7 @@ async def edit_product(
         logger.info(f"Product edited: {product_id} by admin {admin['sub']}")
         return res.data[0] if res.data else {}
     except Exception as e:
-        logger.error(f"Failed to edit product: {e}")
+        logger.error(f"Failed to edit product: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to edit product: {str(e)}")
 
 
@@ -248,5 +248,5 @@ async def delete_product(product_id: str, admin=Depends(require_admin)):
         logger.info(f"Product deleted: {prod.data.get('name')} by admin {admin['sub']}")
         return {"success": True}
     except Exception as e:
-        logger.error(f"Failed to delete product: {e}")
+        logger.error(f"Failed to delete product: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to delete product")

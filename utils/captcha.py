@@ -23,5 +23,5 @@ def verify_turnstile(token: str, ip: str = "") -> bool:
             return False
         return True
     except Exception as e:
-        logger.error(f"Turnstile verification error: {e}")
+        logger.error(f"Turnstile verification error: {e}", exc_info=True)
         return False

@@ -62,7 +62,7 @@ async def dashboard_data(admin=Depends(require_admin)):
             "in_transit_shipments": in_transit_shipments,
         }
     except Exception as e:
-        logger.error(f"Dashboard data failed: {e}")
+        logger.error(f"Dashboard data failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch dashboard data")
 
 
@@ -93,7 +93,7 @@ async def get_shipment_label(order_id: str, admin=Depends(require_admin)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Label fetch failed for order {order_id}: {e}")
+        logger.error(f"Label fetch failed for order {order_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch label")
 
 
@@ -125,7 +125,7 @@ async def ship_order(order_id: str, admin=Depends(require_admin)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Manual shipment creation failed for order {order_id}: {e}")
+        logger.error(f"Manual shipment creation failed for order {order_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to create shipment")
 
 
@@ -147,7 +147,7 @@ async def cancel_order_shipment(order_id: str, admin=Depends(require_admin)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Shipment cancellation failed for order {order_id}: {e}")
+        logger.error(f"Shipment cancellation failed for order {order_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to cancel shipment")
 
 
@@ -167,7 +167,7 @@ async def track_order_shipment(order_id: str, admin=Depends(require_admin)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Tracking fetch failed for order {order_id}: {e}")
+        logger.error(f"Tracking fetch failed for order {order_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch tracking info")
 
 
@@ -183,7 +183,7 @@ async def get_setting(key: str, admin=Depends(require_admin)):
         res = supabase_admin.table("settings").select("*").eq("key", key).maybe_single().execute()
         return res.data or {"key": key, "value": None}
     except Exception as e:
-        logger.error(f"Failed to fetch setting {key}: {e}")
+        logger.error(f"Failed to fetch setting {key}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch setting")
 
 
@@ -194,5 +194,5 @@ async def update_setting(key: str, data: SettingUpdate, admin=Depends(require_ad
         logger.info(f"Setting updated: {key} = {data.value} by admin {admin['sub']}")
         return {"success": True}
     except Exception as e:
-        logger.error(f"Failed to update setting {key}: {e}")
+        logger.error(f"Failed to update setting {key}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update setting")

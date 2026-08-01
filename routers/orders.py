@@ -118,7 +118,7 @@ def create_shipment_for_order(order: dict) -> dict | None:
 
         return result
     except Exception as e:
-        logger.error(f"create_shipment_for_order failed for order {order.get('id')}: {e}")
+        logger.error(f"create_shipment_for_order failed for order {order.get('id')}: {e}", exc_info=True)
         return None
 
 
@@ -135,7 +135,7 @@ async def create_order(order: OrderRequest, request: Request):
     try:
         prod_res = supabase_admin.table("products").select("*").eq("id", order.product_id).single().execute()
     except Exception as e:
-        logger.error(f"Order save failed - product fetch: {e}")
+        logger.error(f"Order save failed - product fetch: {e}", exc_info=True)
         raise HTTPException(status_code=404, detail="Product not found")
 
     prod = prod_res.data
@@ -170,7 +170,7 @@ async def create_order(order: OrderRequest, request: Request):
         new_order = res.data[0]
         logger.info(f"Order created: {new_order['id']}, customer: {order.customer_phone}, product: {prod['name']}")
     except Exception as e:
-        logger.error(f"Order save failed: {e}")
+        logger.error(f"Order save failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to create order")
 
     # Decrement stock (product is unique, set stock to 0)
@@ -220,7 +220,7 @@ async def admin_list_orders(
         res = q.execute()
         return res.data or []
     except Exception as e:
-        logger.error(f"Admin: list orders failed: {e}")
+        logger.error(f"Admin: list orders failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch orders")
 
 
@@ -280,7 +280,7 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Order update failed: {e}")
+        logger.error(f"Order update failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update order")
 
 
@@ -290,5 +290,5 @@ async def recent_orders(admin=Depends(require_admin)):
         res = supabase_admin.table("orders").select("*").order("created_at", desc=True).limit(10).execute()
         return res.data or []
     except Exception as e:
-        logger.error(f"Recent orders fetch failed: {e}")
+        logger.error(f"Recent orders fetch failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch recent orders")

@@ -57,7 +57,7 @@ def _post(endpoint: str, payload: dict, timeout: int = 15) -> bool:
         logger.info(f"WhatsApp message sent: {endpoint} to {payload.get('to')}")
         return True
     except Exception as e:
-        logger.error(f"WPPConnect API failed ({endpoint}): {e}")
+        logger.error(f"WPPConnect API failed ({endpoint}): {e}", exc_info=True)
         return False
 
 
@@ -109,7 +109,7 @@ def send_upi_qr(to: str, order_id: str, amount: float) -> bool:
             logger.info(f"UPI QR sent to {to} for order {order_id}")
         return ok
     except Exception as e:
-        logger.error(f"QR code send failed: {e}")
+        logger.error(f"QR code send failed: {e}", exc_info=True)
         return False
 
 

@@ -46,7 +46,7 @@ async def get_latest_order(phone: str):
             .limit(1).execute()
         return res.data[0] if res.data else None
     except Exception as e:
-        logger.error(f"Failed to fetch order for {phone}: {e}")
+        logger.error(f"Failed to fetch order for {phone}: {e}", exc_info=True)
         return None
 
 
@@ -62,7 +62,7 @@ async def set_agent_state(order_id: str, state: dict):
     try:
         supabase_admin.table("orders").update({"agent_state": state}).eq("id", order_id).execute()
     except Exception as e:
-        logger.error(f"Failed to set agent state: {e}")
+        logger.error(f"Failed to set agent state: {e}", exc_info=True)
 
 
 @router.post("/webhook")
@@ -97,7 +97,7 @@ async def whatsapp_webhook(request: Request):
         body = await request.json()
         logger.info(f"Webhook received: {str(body)[:200]}")
     except Exception as e:
-        logger.error(f"Webhook parse error: {e}")
+        logger.error(f"Webhook parse error: {e}", exc_info=True)
         return {"status": "ok"}
 
     event = body.get("event", "")

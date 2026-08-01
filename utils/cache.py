@@ -15,7 +15,7 @@ async def init_redis():
         await redis_client.ping()
         logger.info("Redis connected successfully")
     except Exception as e:
-        logger.error(f"Redis connection failed: {e}")
+        logger.error(f"Redis connection failed: {e}", exc_info=True)
         redis_client = None
 
 async def close_redis():
@@ -34,7 +34,7 @@ async def cache_get(key: str) -> dict | list | None:
         logger.info(f"Cache miss: {key} - fetching from Supabase")
         return None
     except Exception as e:
-        logger.error(f"Cache get error: {e}")
+        logger.error(f"Cache get error: {e}", exc_info=True)
         return None
 
 async def cache_set(key: str, value: dict | list, ttl: int = 900):
@@ -43,7 +43,7 @@ async def cache_set(key: str, value: dict | list, ttl: int = 900):
     try:
         await redis_client.setex(key, ttl, json.dumps(value))
     except Exception as e:
-        logger.error(f"Cache set error: {e}")
+        logger.error(f"Cache set error: {e}", exc_info=True)
 
 async def cache_delete(key: str):
     if not redis_client:
@@ -52,7 +52,7 @@ async def cache_delete(key: str):
         await redis_client.delete(key)
         logger.info(f"Cache cleared: {key}")
     except Exception as e:
-        logger.error(f"Cache delete error: {e}")
+        logger.error(f"Cache delete error: {e}", exc_info=True)
 
 async def cache_clear_pattern(pattern: str):
     if not redis_client:
@@ -63,4 +63,4 @@ async def cache_clear_pattern(pattern: str):
             await redis_client.delete(*keys)
         logger.info(f"Cache cleared pattern: {pattern} - {len(keys)} keys")
     except Exception as e:
-        logger.error(f"Cache clear pattern error: {e}")
+        logger.error(f"Cache clear pattern error: {e}", exc_info=True)

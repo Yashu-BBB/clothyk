@@ -41,7 +41,7 @@ def _maybe_register_pickup(shopkeeper: dict) -> str | None:
     try:
         return register_pickup_address(shopkeeper)
     except Exception as e:
-        logger.error(f"NimbusPost pickup registration errored for shopkeeper {shopkeeper.get('id')}: {e}")
+        logger.error(f"NimbusPost pickup registration errored for shopkeeper {shopkeeper.get('id')}: {e}", exc_info=True)
         return None
 
 
@@ -62,7 +62,7 @@ async def list_shopkeepers(admin=Depends(require_admin)):
 
         return shopkeepers
     except Exception as e:
-        logger.error(f"Failed to list shopkeepers: {e}")
+        logger.error(f"Failed to list shopkeepers: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch shopkeepers")
 
 
@@ -91,7 +91,7 @@ async def add_shopkeeper(data: ShopkeeperCreate, admin=Depends(require_admin)):
 
         return new_sk
     except Exception as e:
-        logger.error(f"Failed to add shopkeeper: {e}")
+        logger.error(f"Failed to add shopkeeper: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to add shopkeeper")
 
 
@@ -113,7 +113,7 @@ async def update_shopkeeper(sk_id: int, data: ShopkeeperUpdate, admin=Depends(re
 
         return updated
     except Exception as e:
-        logger.error(f"Failed to update shopkeeper: {e}")
+        logger.error(f"Failed to update shopkeeper: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update shopkeeper")
 
 
@@ -123,7 +123,7 @@ async def delete_shopkeeper(sk_id: int, admin=Depends(require_admin)):
         supabase_admin.table("shopkeepers").delete().eq("id", sk_id).execute()
         return {"success": True}
     except Exception as e:
-        logger.error(f"Failed to delete shopkeeper: {e}")
+        logger.error(f"Failed to delete shopkeeper: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to delete shopkeeper")
 
 
@@ -134,5 +134,5 @@ async def shopkeepers_dropdown(admin=Depends(require_admin)):
         res = supabase_admin.table("shopkeepers").select("id,shop_name").order("id").execute()
         return [{"id": s["id"], "label": f"#{s['id']:03d} - {s['shop_name']}"} for s in (res.data or [])]
     except Exception as e:
-        logger.error(f"Shopkeeper dropdown failed: {e}")
+        logger.error(f"Shopkeeper dropdown failed: {e}", exc_info=True)
         return []

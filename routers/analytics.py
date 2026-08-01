@@ -191,5 +191,5 @@ async def analytics_overview(admin=Depends(require_admin)):
             "refund_pending_amount": sum(o["our_price"] for o in refund_pending)
         }
     except Exception as e:
-        logger.error(f"Analytics overview failed: {e}")
+        logger.error(f"Analytics overview failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch analytics")

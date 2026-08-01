@@ -69,14 +69,14 @@ def get_auth_token() -> str | None:
         data = resp.json()
         token = data.get("data")
         if not token:
-            logger.error(f"NimbusPost login returned no token: {data}")
+            logger.error(f"NimbusPost login returned no token: {data}", exc_info=True)
             return None
         _token_cache["token"] = token
         _token_cache["fetched_at"] = now
         logger.info("NimbusPost auth token refreshed")
         return token
     except Exception as e:
-        logger.error(f"NimbusPost login failed: {e}")
+        logger.error(f"NimbusPost login failed: {e}", exc_info=True)
         sentry_sdk.capture_exception(e)
         return None
 
@@ -123,12 +123,12 @@ def register_pickup_address(shopkeeper: dict) -> str | None:
         data = resp.json()
         pickup_id = data.get("data", {}).get("pickup_id") if isinstance(data.get("data"), dict) else data.get("pickup_id")
         if not pickup_id:
-            logger.error(f"NimbusPost pickup address registration returned no pickup_id: {data}")
+            logger.error(f"NimbusPost pickup address registration returned no pickup_id: {data}", exc_info=True)
             return None
         logger.info(f"NimbusPost pickup address registered: {shopkeeper.get('shop_name')} -> {pickup_id}")
         return pickup_id
     except Exception as e:
-        logger.error(f"NimbusPost pickup address registration failed for {shopkeeper.get('shop_name')}: {e}")
+        logger.error(f"NimbusPost pickup address registration failed for {shopkeeper.get('shop_name')}: {e}", exc_info=True)
         sentry_sdk.capture_exception(e)
         return None
 
@@ -203,7 +203,7 @@ def create_shipment(order: dict, shopkeeper: dict) -> dict | None:
         body = data.get("data", data)
         awb = body.get("awb_number") or body.get("awb")
         if not awb:
-            logger.error(f"NimbusPost shipment creation returned no AWB for order {order.get('id')}: {data}")
+            logger.error(f"NimbusPost shipment creation returned no AWB for order {order.get('id')}: {data}", exc_info=True)
             return None
 
         result = {
@@ -215,7 +215,7 @@ def create_shipment(order: dict, shopkeeper: dict) -> dict | None:
         logger.info(f"NimbusPost shipment created: order {order.get('id')} -> AWB {awb}")
         return result
     except Exception as e:
-        logger.error(f"NimbusPost shipment creation failed for order {order.get('id')}: {e}")
+        logger.error(f"NimbusPost shipment creation failed for order {order.get('id')}: {e}", exc_info=True)
         sentry_sdk.capture_exception(e)
         return None
 
@@ -246,7 +246,7 @@ def track_shipment(awb: str) -> dict | None:
             "timestamp": body.get("timestamp", ""),
         }
     except Exception as e:
-        logger.error(f"NimbusPost tracking failed for AWB {awb}: {e}")
+        logger.error(f"NimbusPost tracking failed for AWB {awb}: {e}", exc_info=True)
         sentry_sdk.capture_exception(e)
         return None
 
@@ -271,6 +271,6 @@ def cancel_shipment(awb: str) -> bool:
         logger.info(f"NimbusPost shipment cancelled: AWB {awb}")
         return True
     except Exception as e:
-        logger.error(f"NimbusPost shipment cancellation failed for AWB {awb}: {e}")
+        logger.error(f"NimbusPost shipment cancellation failed for AWB {awb}: {e}", exc_info=True)
         sentry_sdk.capture_exception(e)
         return False

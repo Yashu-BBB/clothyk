@@ -33,7 +33,7 @@ async def list_categories(gender: str | None = None):
         res = q.execute()
         return res.data or []
     except Exception as e:
-        logger.error(f"Failed to fetch categories: {e}")
+        logger.error(f"Failed to fetch categories: {e}", exc_info=True)
         return []
 
 
@@ -43,7 +43,7 @@ async def boys_categories():
         res = supabase_admin.table("categories").select("*").eq("gender", "Boys").order("sort_order").execute()
         return res.data or []
     except Exception as e:
-        logger.error(f"Failed to fetch boys categories: {e}")
+        logger.error(f"Failed to fetch boys categories: {e}", exc_info=True)
         return []
 
 
@@ -53,7 +53,7 @@ async def girls_categories():
         res = supabase_admin.table("categories").select("*").eq("gender", "Girls").order("sort_order").execute()
         return res.data or []
     except Exception as e:
-        logger.error(f"Failed to fetch girls categories: {e}")
+        logger.error(f"Failed to fetch girls categories: {e}", exc_info=True)
         return []
 
 
@@ -65,7 +65,7 @@ async def admin_list_categories(admin=Depends(require_admin)):
         res = supabase_admin.table("categories").select("*").order("gender").order("sort_order").execute()
         return res.data or []
     except Exception as e:
-        logger.error(f"Admin: failed to list categories: {e}")
+        logger.error(f"Admin: failed to list categories: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch categories")
 
 
@@ -83,7 +83,7 @@ async def add_category(data: CategoryCreate, admin=Depends(require_admin)):
         logger.info(f"Category added: {data.name} by admin {admin['sub']}")
         return res.data[0]
     except Exception as e:
-        logger.error(f"Failed to add category: {e}")
+        logger.error(f"Failed to add category: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to add category")
 
 
@@ -94,7 +94,7 @@ async def update_category(cat_id: int, data: CategoryUpdate, admin=Depends(requi
         res = supabase_admin.table("categories").update(updates).eq("id", cat_id).execute()
         return res.data[0] if res.data else {}
     except Exception as e:
-        logger.error(f"Failed to update category: {e}")
+        logger.error(f"Failed to update category: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update category")
 
 
@@ -104,5 +104,5 @@ async def delete_category(cat_id: int, admin=Depends(require_admin)):
         supabase_admin.table("categories").delete().eq("id", cat_id).execute()
         return {"success": True}
     except Exception as e:
-        logger.error(f"Failed to delete category: {e}")
+        logger.error(f"Failed to delete category: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to delete category")
