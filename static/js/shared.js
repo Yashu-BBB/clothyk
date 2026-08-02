@@ -141,7 +141,7 @@ function renderProductCard(p) {
   return `
     <div class="product-card" onclick="window.location='/product/${p.id}'">
       <div class="product-img-wrap">
-        <img src="${p.image || '/static/images/placeholder.svg'}" alt="${p.name}" loading="lazy">
+        <img class="product-img" src="${p.image || '/static/images/placeholder.svg'}" alt="${p.name}" loading="lazy">
         ${hasDiscount ? `<div class="discount-badge">-${discountPct}%</div>` : ''}
         <div class="product-card-overlay">
           <span class="btn btn-primary btn-sm" style="pointer-events:none">View Details</span>

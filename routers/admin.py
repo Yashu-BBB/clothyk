@@ -7,7 +7,7 @@ from utils.db import supabase_admin
 from utils.auth_utils import get_admin_from_request, require_admin, hash_password
 from utils.nimbuspost import track_shipment, cancel_shipment
 from utils.cache import (
-    cache_get, cache_set, two_layer_get, two_layer_set,
+    cache_get, cache_set, cache_delete, two_layer_get, two_layer_set,
     two_layer_clear_pattern, mem_delete,
 )
 from utils import cache as cache_utils
@@ -238,6 +238,7 @@ async def update_setting(key: str, data: SettingUpdate, admin=Depends(require_ad
         mem_delete("settings:delivery_fee")
         mem_delete("settings:girls_section_enabled")
         mem_delete("public_settings")
+        await cache_delete("public_settings")
         return {"success": True}
     except Exception as e:
         logger.error(f"Failed to update setting {key}: {e}", exc_info=True)
