@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from utils.db import supabase_admin
 from utils.auth_utils import require_admin
 from utils.nimbuspost import register_pickup_address
+from utils.cache import cache_get, cache_set, two_layer_get, two_layer_set, two_layer_clear_pattern
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -47,7 +48,12 @@ def _maybe_register_pickup(shopkeeper: dict) -> str | None:
 
 @router.get("/admin/all")
 async def list_shopkeepers(admin=Depends(require_admin)):
+    cache_key = "shopkeepers:all"
     try:
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         res = supabase_admin.table("shopkeepers").select("*").order("id").execute()
         shopkeepers = res.data or []
 
@@ -60,6 +66,7 @@ async def list_shopkeepers(admin=Depends(require_admin)):
             sk["total_sold"] = sold.count or 0
             sk["code"] = code
 
+        await cache_set(cache_key, shopkeepers, ttl=900)
         return shopkeepers
     except Exception as e:
         logger.error(f"Failed to list shopkeepers: {e}", exc_info=True)
@@ -89,6 +96,7 @@ async def add_shopkeeper(data: ShopkeeperCreate, admin=Depends(require_admin)):
         elif data.address:
             logger.warning(f"NimbusPost pickup registration failed/skipped for new shopkeeper {new_sk['id']}")
 
+        await two_layer_clear_pattern("shopkeepers:")
         return new_sk
     except Exception as e:
         logger.error(f"Failed to add shopkeeper: {e}", exc_info=True)
@@ -111,6 +119,7 @@ async def update_shopkeeper(sk_id: int, data: ShopkeeperUpdate, admin=Depends(re
             else:
                 logger.warning(f"NimbusPost pickup re-registration failed/skipped for shopkeeper {sk_id}")
 
+        await two_layer_clear_pattern("shopkeepers:")
         return updated
     except Exception as e:
         logger.error(f"Failed to update shopkeeper: {e}", exc_info=True)
@@ -121,6 +130,7 @@ async def update_shopkeeper(sk_id: int, data: ShopkeeperUpdate, admin=Depends(re
 async def delete_shopkeeper(sk_id: int, admin=Depends(require_admin)):
     try:
         supabase_admin.table("shopkeepers").delete().eq("id", sk_id).execute()
+        await two_layer_clear_pattern("shopkeepers:")
         return {"success": True}
     except Exception as e:
         logger.error(f"Failed to delete shopkeeper: {e}", exc_info=True)
@@ -130,9 +140,15 @@ async def delete_shopkeeper(sk_id: int, admin=Depends(require_admin)):
 @router.get("/admin/dropdown")
 async def shopkeepers_dropdown(admin=Depends(require_admin)):
     """For product form dropdown."""
+    cache_key = "shopkeepers:dropdown"
     try:
+        cached = await two_layer_get(cache_key)
+        if cached is not None:
+            return cached
         res = supabase_admin.table("shopkeepers").select("id,shop_name").order("id").execute()
-        return [{"id": s["id"], "label": f"#{s['id']:03d} - {s['shop_name']}"} for s in (res.data or [])]
+        data = [{"id": s["id"], "label": f"#{s['id']:03d} - {s['shop_name']}"} for s in (res.data or [])]
+        await two_layer_set(cache_key, data, redis_ttl=900, mem_ttl=600)
+        return data
     except Exception as e:
         logger.error(f"Shopkeeper dropdown failed: {e}", exc_info=True)
         return []

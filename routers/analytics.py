@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Depends
 from utils.db import supabase_admin
 from utils.auth_utils import require_admin
+from utils.cache import cache_get, cache_set
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -29,7 +30,12 @@ def start_of_last_month():
 
 @router.get("/overview")
 async def analytics_overview(admin=Depends(require_admin)):
+    cache_key = "analytics:overview"
     try:
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         # All time - paginate to avoid memory issues at scale
         all_orders = []
         page = 0
@@ -157,7 +163,7 @@ async def analytics_overview(admin=Depends(require_admin)):
 
         cancellation_rate = (status_counts.get("cancelled", 0) / len(orders) * 100) if orders else 0
 
-        return {
+        result = {
             "all_time": {
                 "revenue": total_revenue,
                 "cost": total_cost,
@@ -190,6 +196,8 @@ async def analytics_overview(admin=Depends(require_admin)):
             "refund_pending_count": len(refund_pending),
             "refund_pending_amount": sum(o["our_price"] for o in refund_pending)
         }
+        await cache_set(cache_key, result, ttl=300)
+        return result
     except Exception as e:
         logger.error(f"Analytics overview failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch analytics")

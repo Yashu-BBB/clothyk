@@ -43,6 +43,15 @@ failed_attempts: dict[str, int] = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_redis()
+
+    # Warm critical caches on startup
+    try:
+        from routers.categories import warm_categories_cache
+        await warm_categories_cache()
+        logger.info("Cache warmed on startup ✅")
+    except Exception as e:
+        logger.warning(f"Cache warming failed (non-critical): {e}")
+
     logger.info("App started successfully")
     yield
     await close_redis()

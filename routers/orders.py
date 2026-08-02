@@ -8,6 +8,7 @@ from utils.auth_utils import require_admin
 from utils.captcha import verify_turnstile
 from utils.whatsapp_utils import send_text, send_upi_qr, msg_order_received, msg_shipped, msg_refund_processed
 from utils.nimbuspost import create_shipment
+from utils.cache import cache_get, cache_set, cache_delete, two_layer_get, two_layer_set
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -64,7 +65,13 @@ def get_delivery_fee() -> float:
 @router.get("/delivery-fee")
 async def public_delivery_fee():
     """Public (no-auth) endpoint the checkout page reads to show the delivery fee."""
-    return {"delivery_fee": get_delivery_fee()}
+    cache_key = "settings:delivery_fee"
+    cached = await two_layer_get(cache_key)
+    if cached is not None:
+        return cached
+    result = {"delivery_fee": get_delivery_fee()}
+    await two_layer_set(cache_key, result, redis_ttl=300, mem_ttl=120)
+    return result
 
 
 def create_shipment_for_order(order: dict) -> dict | None:
@@ -169,6 +176,10 @@ async def create_order(order: OrderRequest, request: Request):
         res = supabase_admin.table("orders").insert(order_data).execute()
         new_order = res.data[0]
         logger.info(f"Order created: {new_order['id']}, customer: {order.customer_phone}, product: {prod['name']}")
+
+        await cache_delete("orders:recent")
+        await cache_delete("admin:dashboard")
+        await cache_delete("analytics:overview")
     except Exception as e:
         logger.error(f"Order save failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to create order")
@@ -247,6 +258,10 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
         supabase_admin.table("orders").update(updates).eq("id", order_id).execute()
         logger.info(f"Order status updated: {order_id}, {order['status']} → {update.status}")
 
+        await cache_delete("admin:dashboard")
+        await cache_delete("analytics:overview")
+        await cache_delete("orders:recent")
+
         # WhatsApp notifications on status change
         phone = order["customer_phone"]
 
@@ -286,9 +301,15 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
 
 @router.get("/admin/recent")
 async def recent_orders(admin=Depends(require_admin)):
+    cache_key = "orders:recent"
     try:
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return cached
         res = supabase_admin.table("orders").select("*").order("created_at", desc=True).limit(10).execute()
-        return res.data or []
+        data = res.data or []
+        await cache_set(cache_key, data, ttl=60)
+        return data
     except Exception as e:
         logger.error(f"Recent orders fetch failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch recent orders")

@@ -6,7 +6,10 @@ import json
 import uuid
 
 from utils.db import supabase_admin
-from utils.cache import cache_get, cache_set, cache_clear_pattern
+from utils.cache import (
+    cache_get, cache_set, cache_clear_pattern,
+    two_layer_get, two_layer_set, two_layer_clear_pattern, mem_clear_pattern,
+)
 from utils.auth_utils import require_admin
 
 logger = logging.getLogger(__name__)
@@ -96,7 +99,7 @@ async def list_products(
 @router.get("/filter-options")
 async def get_filter_options(gender: Optional[str] = None):
     cache_key = f"products:filter-options:{gender}"
-    cached = await cache_get(cache_key)
+    cached = await two_layer_get(cache_key)
     if cached:
         return cached
     try:
@@ -124,7 +127,7 @@ async def get_filter_options(gender: Optional[str] = None):
                 "max": max(prices) if prices else 0,
             },
         }
-        await cache_set(cache_key, result, ttl=900)
+        await two_layer_set(cache_key, result, redis_ttl=900, mem_ttl=120)
         return result
     except Exception as e:
         logger.error(f"Failed to fetch filter options: {e}", exc_info=True)
@@ -163,12 +166,30 @@ async def list_categories():
 
 @router.get("/{product_id}")
 async def get_product(product_id: str):
+    cache_key = f"product:{product_id}"
     try:
+        cached = await two_layer_get(cache_key)
+        if cached:
+            # View count still increments on every request, cache hit or miss.
+            # Read the live count rather than the cached one so concurrent
+            # cache hits don't clobber each other's increments.
+            try:
+                live = supabase_admin.table("products").select("view_count").eq("id", product_id).single().execute()
+                if live.data:
+                    new_count = live.data["view_count"] + 1
+                    supabase_admin.table("products").update({"view_count": new_count}).eq("id", product_id).execute()
+                    cached = {**cached, "view_count": new_count}
+                    logger.info(f"Product view incremented (cache hit): {product_id}")
+            except Exception as e:
+                logger.warning(f"View count increment failed for {product_id}: {e}")
+            return cached
+
         res = supabase_admin.table("products").select(SAFE_FIELDS).eq("id", product_id).single().execute()
         if not res.data:
             raise HTTPException(status_code=404, detail="Product not found")
         supabase_admin.table("products").update({"view_count": res.data["view_count"] + 1}).eq("id", product_id).execute()
         logger.info(f"Product view incremented: {product_id}")
+        await two_layer_set(cache_key, res.data, redis_ttl=900, mem_ttl=120)
         return res.data
     except HTTPException:
         raise
@@ -179,7 +200,12 @@ async def get_product(product_id: str):
 
 @router.get("/{product_id}/related")
 async def related_products(product_id: str):
+    cache_key = f"product:{product_id}:related"
     try:
+        cached = await cache_get(cache_key)
+        if cached:
+            return cached
+
         prod = supabase_admin.table("products").select("category,gender").eq("id", product_id).single().execute()
         if not prod.data:
             return []
@@ -187,7 +213,9 @@ async def related_products(product_id: str):
         if prod.data.get("gender"):
             q = q.eq("gender", prod.data["gender"])
         res = q.execute()
-        return res.data or []
+        data = res.data or []
+        await cache_set(cache_key, data, ttl=900)
+        return data
     except Exception as e:
         logger.error(f"Failed related products: {e}", exc_info=True)
         return []
@@ -254,6 +282,8 @@ async def add_product(
         }
         res = supabase_admin.table("products").insert(product).execute()
         await cache_clear_pattern("products:*")
+        await two_layer_clear_pattern("products:filter-options:")
+        mem_clear_pattern("product:")
         logger.info(f"Product added: {name} by admin {admin['sub']}")
         return res.data[0]
     except HTTPException:
@@ -307,6 +337,8 @@ async def edit_product(
 
         res = supabase_admin.table("products").update(updates).eq("id", product_id).execute()
         await cache_clear_pattern("products:*")
+        await two_layer_clear_pattern("products:filter-options:")
+        mem_clear_pattern("product:")
         logger.info(f"Product edited: {product_id} by admin {admin['sub']}")
         return res.data[0] if res.data else {}
     except Exception as e:
@@ -320,6 +352,8 @@ async def delete_product(product_id: str, admin=Depends(require_admin)):
         prod = supabase_admin.table("products").select("name").eq("id", product_id).single().execute()
         supabase_admin.table("products").delete().eq("id", product_id).execute()
         await cache_clear_pattern("products:*")
+        await two_layer_clear_pattern("products:filter-options:")
+        mem_clear_pattern("product:")
         logger.info(f"Product deleted: {prod.data.get('name')} by admin {admin['sub']}")
         return {"success": True}
     except Exception as e:

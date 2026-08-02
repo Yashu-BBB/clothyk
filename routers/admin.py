@@ -6,6 +6,11 @@ from pydantic import BaseModel
 from utils.db import supabase_admin
 from utils.auth_utils import get_admin_from_request, require_admin, hash_password
 from utils.nimbuspost import track_shipment, cancel_shipment
+from utils.cache import (
+    cache_get, cache_set, two_layer_get, two_layer_set,
+    two_layer_clear_pattern, mem_delete,
+)
+from utils import cache as cache_utils
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -21,7 +26,12 @@ def admin_or_redirect(request: Request):
 
 @router.get("/dashboard-data")
 async def dashboard_data(admin=Depends(require_admin)):
+    cache_key = "admin:dashboard"
     try:
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         products_count = supabase_admin.table("products").select("id", count="exact").execute().count or 0
 
         from datetime import datetime, timezone
@@ -48,7 +58,7 @@ async def dashboard_data(admin=Depends(require_admin)):
         in_transit_shipments = supabase_admin.table("orders").select("id", count="exact")\
             .eq("status", "shipped").not_.is_("nimbuspost_awb", "null").execute().count or 0
 
-        return {
+        result = {
             "total_products": products_count,
             "orders_today": len(today_orders),
             "revenue_today": sum(o["our_price"] for o in today_orders),
@@ -61,9 +71,28 @@ async def dashboard_data(admin=Depends(require_admin)):
             "pending_shipments": pending_shipments,
             "in_transit_shipments": in_transit_shipments,
         }
+        await cache_set(cache_key, result, ttl=120)
+        return result
     except Exception as e:
         logger.error(f"Dashboard data failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch dashboard data")
+
+
+@router.get("/cache-stats")
+async def cache_stats(admin=Depends(require_admin)):
+    """Shows current cache status for admin monitoring."""
+    import time
+    active_mem_keys = [
+        k for k, (_, exp) in cache_utils._mem_cache.items()
+        if time.time() < exp
+    ]
+    return {
+        "memory_cache": {
+            "total_keys": len(active_mem_keys),
+            "keys": active_mem_keys
+        },
+        "redis": "connected" if cache_utils.redis_client else "disconnected"
+    }
 
 
 @router.post("/change-password")
@@ -84,12 +113,19 @@ async def change_password(
 
 @router.get("/orders/{order_id}/label")
 async def get_shipment_label(order_id: str, admin=Depends(require_admin)):
+    cache_key = f"order:{order_id}:label"
     try:
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         res = supabase_admin.table("orders").select("label_url").eq("id", order_id).single().execute()
         order = res.data
         if not order or not order.get("label_url"):
             raise HTTPException(status_code=404, detail="No shipping label available for this order")
-        return {"label_url": order["label_url"]}
+        result = {"label_url": order["label_url"]}
+        await cache_set(cache_key, result, ttl=3600)
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -179,9 +215,15 @@ class SettingUpdate(BaseModel):
 
 @router.get("/settings/{key}")
 async def get_setting(key: str, admin=Depends(require_admin)):
+    cache_key = f"settings:{key}"
     try:
+        cached = await two_layer_get(cache_key)
+        if cached is not None:
+            return cached
         res = supabase_admin.table("settings").select("*").eq("key", key).maybe_single().execute()
-        return res.data or {"key": key, "value": None}
+        result = res.data or {"key": key, "value": None}
+        await two_layer_set(cache_key, result, redis_ttl=300, mem_ttl=120)
+        return result
     except Exception as e:
         logger.error(f"Failed to fetch setting {key}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch setting")
@@ -192,6 +234,8 @@ async def update_setting(key: str, data: SettingUpdate, admin=Depends(require_ad
     try:
         supabase_admin.table("settings").upsert({"key": key, "value": data.value}).execute()
         logger.info(f"Setting updated: {key} = {data.value} by admin {admin['sub']}")
+        await two_layer_clear_pattern("settings:")
+        mem_delete("settings:delivery_fee")
         return {"success": True}
     except Exception as e:
         logger.error(f"Failed to update setting {key}: {e}", exc_info=True)
