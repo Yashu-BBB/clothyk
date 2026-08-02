@@ -57,7 +57,7 @@ def _post(endpoint: str, payload: dict, timeout: int = 15) -> bool:
         logger.info(f"WhatsApp message sent: {endpoint} to {payload.get('to')}")
         return True
     except Exception as e:
-        logger.error(f"WPPConnect API failed ({endpoint}): {e}", exc_info=True)
+        logger.error(f"WPPConnect API failed ({endpoint}): {e}")
         return False
 
 
@@ -109,26 +109,18 @@ def send_upi_qr(to: str, order_id: str, amount: float) -> bool:
             logger.info(f"UPI QR sent to {to} for order {order_id}")
         return ok
     except Exception as e:
-        logger.error(f"QR code send failed: {e}", exc_info=True)
+        logger.error(f"QR code send failed: {e}")
         return False
 
 
-# ─── Message Templates ──────────────────────────────────────────────────────
-# msg_order_received / msg_payment_confirmed / msg_cod_confirmed accept an
-# optional delivery_fee so the customer sees a clear Item + Delivery
-# breakdown wherever the payment amount is shown.
+# ─── Message Templates (unchanged) ─────────────────────────────────────────
 
-def msg_order_received(name: str, product: str, size: str, color: str, amount: float, delivery_fee: float = 0) -> str:
-    breakdown = (
-        f"Item: ₹{(amount - delivery_fee):.0f}\n"
-        f"Delivery: ₹{delivery_fee:.0f}\n"
-        f"Total: ₹{amount:.0f}\n\n"
-    ) if delivery_fee else f"Total: ₹{amount:.0f}\n\n"
+def msg_order_received(name: str, product: str, size: str, color: str, amount: float) -> str:
     return (
         f"Hi {name}! 👋\n"
         f"We received your order for\n"
         f"*{product}* (Size {size}, {color})\n"
-        f"{breakdown}"
+        f"Total: ₹{amount:.0f}\n\n"
         f"How would you like to pay?\n"
         f"Reply:\n"
         f"1️⃣ UPI (GPay/PhonePe/Paytm)\n"
@@ -149,17 +141,13 @@ def msg_screenshot_received() -> str:
         "You will be notified once confirmed"
     )
 
-def msg_payment_confirmed(product: str, size: str, color: str, amount: float, delivery_fee: float = 0) -> str:
-    amount_line = (
-        f"Item: ₹{(amount - delivery_fee):.0f} + Delivery: ₹{delivery_fee:.0f}\n"
-        f"Amount Paid: ₹{amount:.0f}\n\n"
-    ) if delivery_fee else f"Amount Paid: ₹{amount:.0f}\n\n"
+def msg_payment_confirmed(product: str, size: str, color: str, amount: float) -> str:
     return (
         f"✅ Payment Verified! Order Confirmed 🎉\n\n"
         f"Order Details:\n"
         f"Product: {product}\n"
         f"Size: {size} | Color: {color}\n"
-        f"{amount_line}"
+        f"Amount Paid: ₹{amount:.0f}\n\n"
         f"We will notify you once shipped! 📦\n\n"
         f"Reply:\n"
         f"TRACK → Track your order 📦\n"
@@ -167,17 +155,13 @@ def msg_payment_confirmed(product: str, size: str, color: str, amount: float, de
         f"HELP → Show all options"
     )
 
-def msg_cod_confirmed(product: str, size: str, color: str, amount: float, delivery_fee: float = 0) -> str:
-    amount_line = (
-        f"Item: ₹{(amount - delivery_fee):.0f} + Delivery: ₹{delivery_fee:.0f}\n"
-        f"Amount: ₹{amount:.0f} (pay on delivery)\n\n"
-    ) if delivery_fee else f"Amount: ₹{amount:.0f} (pay on delivery)\n\n"
+def msg_cod_confirmed(product: str, size: str, color: str, amount: float) -> str:
     return (
         f"✅ Order Confirmed! (Cash on Delivery)\n\n"
         f"Order Details:\n"
         f"Product: {product}\n"
         f"Size: {size} | Color: {color}\n"
-        f"{amount_line}"
+        f"Amount: ₹{amount:.0f} (pay on delivery)\n\n"
         f"Expected delivery: 5-7 working days 🚚\n\n"
         f"Reply:\n"
         f"TRACK → Track your order 📦\n"
@@ -298,3 +282,37 @@ def msg_help() -> str:
         "For other queries we will\n"
         "get back to you shortly! 🙏"
     )
+
+
+# ─── Admin inbox: conversation logging + bot pause ─────────────────────────
+
+def log_message(phone: str, direction: str, body: str, message_type: str = "text", customer_name: str = None):
+    """
+    Record a message in the conversations/messages tables so it shows up
+    in the admin "Conversations" inbox. `direction` is 'in' (customer to
+    shop) or 'out' (shop to customer). `phone` should be the bare real
+    phone digits (e.g. "7975735906"), not a JID.
+    """
+    try:
+        upsert_data = {"phone": phone, "last_message_at": "now()"}
+        if customer_name:
+            upsert_data["customer_name"] = customer_name
+        supabase_admin.table("conversations").upsert(upsert_data, on_conflict="phone").execute()
+
+        supabase_admin.table("messages").insert({
+            "phone": phone,
+            "direction": direction,
+            "body": body,
+            "message_type": message_type,
+        }).execute()
+    except Exception as e:
+        logger.error(f"Failed to log message for {phone}: {e}")
+
+
+def is_bot_paused(phone: str) -> bool:
+    """Check whether an admin has taken over this conversation manually."""
+    try:
+        res = supabase_admin.table("conversations").select("bot_paused").eq("phone", phone).single().execute()
+        return bool(res.data and res.data.get("bot_paused"))
+    except Exception:
+        return False  # no conversation row yet, or lookup failed — bot stays active by default

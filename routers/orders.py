@@ -6,7 +6,7 @@ from slowapi.util import get_remote_address
 from utils.db import supabase_admin
 from utils.auth_utils import require_admin
 from utils.captcha import verify_turnstile
-from utils.whatsapp_utils import send_text, send_upi_qr, msg_order_received, msg_shipped, msg_refund_processed
+from utils.whatsapp_utils import send_text, send_image_url, send_upi_qr, msg_order_received, msg_shipped, msg_refund_processed
 from utils.nimbuspost import create_shipment
 from utils.cache import cache_get, cache_set, cache_delete, two_layer_get, two_layer_set
 
@@ -153,6 +153,16 @@ async def create_order(order: OrderRequest, request: Request):
     # so later changes to the setting never alter an existing order's total.
     delivery_fee = get_delivery_fee()
 
+    # Main product photo, denormalized onto the order so it stays correct
+    # even if the product is later edited or removed. Prefer the new
+    # multi-image array's first photo, fall back to the legacy single
+    # "image" field for older products.
+    main_image_url = None
+    if prod.get("images"):
+        main_image_url = prod["images"][0]
+    elif prod.get("image"):
+        main_image_url = prod["image"]
+
     # Create order
     try:
         order_data = {
@@ -163,6 +173,7 @@ async def create_order(order: OrderRequest, request: Request):
             "customer_pincode": order.customer_pincode,
             "product_id": order.product_id,
             "product_name": prod["name"],
+            "product_image": main_image_url,
             "size": order.size,
             "color": order.color,
             "our_price": prod["our_price"],
@@ -197,23 +208,26 @@ async def create_order(order: OrderRequest, request: Request):
         f"Total: ₹{total_amount:.0f}\n\n"
     ) if delivery_fee else f"Price: ₹{prod['our_price']:.0f}\n\n"
 
+    admin_notification = (
+        f"🛍️ New Order!\n\n"
+        f"Product: {prod['name']}\n"
+        f"Code: {prod['shopkeeper_code']}\n"
+        f"Size: {order.size} | Color: {order.color}\n"
+        f"{price_lines}"
+        f"👤 Customer Details:\n"
+        f"Name: {order.customer_name}\n"
+        f"Phone: {order.customer_phone}\n"
+        f"Address: {order.customer_address}\n"
+        f"City: {order.customer_city}\n"
+        f"Pincode: {order.customer_pincode}"
+    )
+
     return {
         "success": True,
         "order_id": new_order["id"],
         "admin_phone": WA_NUMBER,
-        "whatsapp_message": (
-            f"🛍️ New Order!\n\n"
-            f"Product: {prod['name']}\n"
-            f"Code: {prod['shopkeeper_code']}\n"
-            f"Size: {order.size} | Color: {order.color}\n"
-            f"{price_lines}"
-            f"👤 Customer Details:\n"
-            f"Name: {order.customer_name}\n"
-            f"Phone: {order.customer_phone}\n"
-            f"Address: {order.customer_address}\n"
-            f"City: {order.customer_city}\n"
-        f"Pincode: {order.customer_pincode}"
-        )
+        "whatsapp_message": admin_notification,
+        "product_image": main_image_url
     }
 
 
@@ -278,6 +292,37 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
             send_text(phone, msg_payment_confirmed(
                 order["product_name"], order["size"], order["color"], total_amount, delivery_fee
             ))
+
+            # Also notify the shopkeeper who supplies this product, so they
+            # know what to prepare. Non-fatal — a notification failure must
+            # never block the order confirmation itself.
+            try:
+                shopkeeper_id = order.get("shopkeeper_id")
+                if shopkeeper_id:
+                    sk_res = supabase_admin.table("shopkeepers").select("*").eq("id", shopkeeper_id).single().execute()
+                    shopkeeper = sk_res.data
+                    if shopkeeper and shopkeeper.get("contact"):
+                        sk_message = (
+                            f"✅ Order Confirmed — Please Prepare!\n\n"
+                            f"Product: {order['product_name']}\n"
+                            f"Code: {order.get('shopkeeper_code') or '—'}\n"
+                            f"Size: {order['size']} | Color: {order['color']}\n\n"
+                            f"👤 Ship To:\n"
+                            f"Name: {order['customer_name']}\n"
+                            f"Address: {order['customer_address']}\n"
+                            f"City: {order['customer_city']}\n"
+                            f"Pincode: {order.get('customer_pincode') or '—'}"
+                        )
+                        if order.get("product_image"):
+                            send_image_url(shopkeeper["contact"], order["product_image"], sk_message)
+                        else:
+                            send_text(shopkeeper["contact"], sk_message)
+                    else:
+                        logger.warning(f"Shopkeeper {shopkeeper_id} has no contact number — skipping notification")
+                else:
+                    logger.warning(f"Order {order_id} has no shopkeeper_id — skipping shopkeeper notification")
+            except Exception as e:
+                logger.warning(f"Shopkeeper notification failed for order {order_id}: {e}")
 
         if update.refund_status == "processed":
             send_text(phone, msg_refund_processed(total_amount))
