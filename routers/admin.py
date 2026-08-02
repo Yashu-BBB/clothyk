@@ -236,7 +236,36 @@ async def update_setting(key: str, data: SettingUpdate, admin=Depends(require_ad
         logger.info(f"Setting updated: {key} = {data.value} by admin {admin['sub']}")
         await two_layer_clear_pattern("settings:")
         mem_delete("settings:delivery_fee")
+        mem_delete("settings:girls_section_enabled")
+        mem_delete("public_settings")
         return {"success": True}
     except Exception as e:
         logger.error(f"Failed to update setting {key}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update setting")
+
+
+# ─── Public Settings (no auth — for customer-facing pages) ─────────────────
+
+@router.get("/public-settings")
+async def public_settings():
+    """Public endpoint — returns non-sensitive settings for frontend.
+    No auth required. Cached 5 min in Redis / 2 min in memory.
+    """
+    cache_key = "public_settings"
+    try:
+        cached = await two_layer_get(cache_key)
+        if cached is not None:
+            return cached
+
+        res = supabase_admin.table("settings").select("key,value").in_(
+            "key", ["girls_section_enabled", "delivery_fee"]
+        ).execute()
+        result = {row["key"]: row["value"] for row in (res.data or [])}
+        # Ensure defaults if rows don't exist yet
+        result.setdefault("girls_section_enabled", "false")
+        result.setdefault("delivery_fee", "0")
+        await two_layer_set(cache_key, result, redis_ttl=300, mem_ttl=120)
+        return result
+    except Exception as e:
+        logger.error(f"Failed to fetch public settings: {e}", exc_info=True)
+        return {"girls_section_enabled": "false", "delivery_fee": "0"}

@@ -14,6 +14,8 @@
     .toggle-slider:before { position:absolute; content:""; height:18px; width:18px; left:3px; bottom:3px; background:white; border-radius:50%; transition:.2s; }
     .toggle-switch input:checked + .toggle-slider { background:var(--primary,#7C3AED); }
     .toggle-switch input:checked + .toggle-slider:before { transform:translateX(20px); }
+    /* Black toggle variant for Section Settings */
+    .toggle-switch.black-toggle input:checked + .toggle-slider { background:#0A0A0A; }
   </style>
 </head>
 <body>
@@ -71,6 +73,42 @@
           <span style="font-weight:600">₹</span>
           <input type="number" id="delivery-fee-input" class="form-control" style="width:100px" min="0" step="1" placeholder="e.g. 50">
           <button class="btn btn-primary btn-sm" onclick="saveDeliveryFee()">Save</button>
+        </div>
+      </div>
+
+      <!-- Section Settings -->
+      <div class="stat-card" style="margin-top:16px">
+        <div style="font-weight:700;margin-bottom:4px">Section Settings</div>
+        <div style="color:var(--muted);font-size:0.85rem;margin-bottom:18px">Control which gender sections are visible to customers.</div>
+
+        <!-- Girls Section Row -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-weight:600;margin-bottom:2px">Girls Section</div>
+            <div id="girls-section-status" style="font-size:0.8rem;color:var(--muted)">Loading...</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <label class="toggle-switch black-toggle">
+              <input type="checkbox" id="girls-section-toggle" onchange="toggleGirlsSection()">
+              <span class="toggle-slider"></span>
+            </label>
+            <span id="girls-section-btn-label" style="font-size:0.8rem;color:var(--muted);min-width:80px"></span>
+          </div>
+        </div>
+
+        <!-- Boys Section Row -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0">
+          <div>
+            <div style="font-weight:600;margin-bottom:2px">Boys Section</div>
+            <div style="font-size:0.8rem;color:var(--muted)">Always visible to customers</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <label class="toggle-switch black-toggle">
+              <input type="checkbox" checked disabled style="opacity:0;width:0;height:0">
+              <span class="toggle-slider" style="background:#0A0A0A;cursor:default"></span>
+            </label>
+            <span style="font-size:0.8rem;color:var(--success);font-weight:600;min-width:80px">Always On</span>
+          </div>
         </div>
       </div>
 
@@ -231,6 +269,44 @@ async function saveDeliveryFee() {
   }
 }
 
+async function loadGirlsSectionSetting() {
+  try {
+    const setting = await apiFetch("/api/admin/settings/girls_section_enabled");
+    const enabled = setting.value === "true";
+    const toggle = document.getElementById("girls-section-toggle");
+    const statusEl = document.getElementById("girls-section-status");
+    const btnLabel = document.getElementById("girls-section-btn-label");
+    toggle.checked = enabled;
+    statusEl.textContent = enabled ? "Visible to customers" : "Hidden from customers";
+    statusEl.style.color = enabled ? "var(--success)" : "var(--danger,#C0392B)";
+    btnLabel.textContent = enabled ? "Enabled" : "Disabled";
+    btnLabel.style.color = enabled ? "var(--success)" : "var(--muted)";
+  } catch(e) {
+    // Setting may not exist yet — default off
+    document.getElementById("girls-section-status").textContent = "Disabled (default)";
+  }
+}
+
+async function toggleGirlsSection() {
+  const enabled = document.getElementById("girls-section-toggle").checked;
+  const statusEl = document.getElementById("girls-section-status");
+  const btnLabel = document.getElementById("girls-section-btn-label");
+  try {
+    await apiFetch("/api/admin/settings/girls_section_enabled", {
+      method: "PUT",
+      body: JSON.stringify({ value: enabled ? "true" : "false" })
+    });
+    statusEl.textContent = enabled ? "Visible to customers" : "Hidden from customers";
+    statusEl.style.color = enabled ? "var(--success)" : "var(--danger,#C0392B)";
+    btnLabel.textContent = enabled ? "Enabled" : "Disabled";
+    btnLabel.style.color = enabled ? "var(--success)" : "var(--muted)";
+    showToast(enabled ? "Girls section enabled ✅" : "Girls section disabled", enabled ? "success" : "warning");
+  } catch(e) {
+    showToast("Failed to update setting", "error");
+    document.getElementById("girls-section-toggle").checked = !enabled;
+  }
+}
+
 async function logout() {
   await apiFetch("/api/auth/logout", { method: "POST" });
   window.location = "/admin/login";
@@ -239,6 +315,7 @@ async function logout() {
 loadDashboard();
 loadAutoShipSetting();
 loadDeliveryFee();
+loadGirlsSectionSetting();
 </script>
 </body>
 </html>

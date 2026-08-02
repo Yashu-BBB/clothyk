@@ -420,7 +420,7 @@
     <a href="/" class="nav-logo">Clothyk</a>
     <div class="nav-links">
       <a href="/">Home</a>
-      <a href="/products?gender=Girls">Girls</a>
+      <a href="/products?gender=Girls" class="girls-nav-link">Girls</a>
       <a href="/products?gender=Boys">Boys</a>
       <a href="/wishlist">Wishlist</a>
     </div>
@@ -440,7 +440,7 @@
   </nav>
   <div id="mobile-nav" class="mobile-nav">
     <a href="/">Home</a>
-    <a href="/products?gender=Girls">Girls Collection</a>
+    <a href="/products?gender=Girls" class="girls-nav-link">Girls Collection</a>
     <a href="/products?gender=Boys">Boys Collection</a>
     <a href="/wishlist">Wishlist</a>
     <a href="/cart">Cart</a>
@@ -614,6 +614,45 @@
   <div id="toast-container"></div>
   <script src="/static/js/shared.js"></script>
   <script>
+    /* ─── Image hover-flip for product cards ───────────────────────────────────────── */
+    /* Product card images are rendered by renderProductCard() in shared.js.
+       We attach hover listeners via event delegation on the grid container.
+       When hovered, if a second image exists in data-hover-img attr, we swap. */
+    function attachHoverFlip(grid) {
+      // We use event delegation: mouseenter/mouseleave on .product-card
+      grid.addEventListener('mouseover', function(e) {
+        const card = e.target.closest('.product-card');
+        if (!card) return;
+        const img = card.querySelector('.product-img');
+        const hoverSrc = card.dataset.hoverImg;
+        if (img && hoverSrc && !card._hoverApplied) {
+          card._hoverApplied = true;
+          img.style.transition = 'opacity 0.3s ease';
+          img.style.opacity = '0';
+          setTimeout(() => {
+            img.src = hoverSrc;
+            img.style.opacity = '1';
+          }, 150);
+        }
+      });
+      grid.addEventListener('mouseout', function(e) {
+        const card = e.target.closest('.product-card');
+        if (!card) return;
+        const toElement = e.relatedTarget;
+        if (card.contains(toElement)) return; // still inside card
+        const img = card.querySelector('.product-img');
+        const origSrc = card.dataset.origImg;
+        if (img && origSrc && card._hoverApplied) {
+          card._hoverApplied = false;
+          img.style.opacity = '0';
+          setTimeout(() => {
+            img.src = origSrc;
+            img.style.opacity = '1';
+          }, 150);
+        }
+      });
+    }
+
     const COLOR_MAP = {
       'Red': '#E53E3E', 'Black': '#1A1A1A', 'White': '#F7F7F7', 'Navy Blue': '#1A365D',
       'Blue': '#3182CE', 'Green': '#38A169', 'Yellow': '#ECC94B', 'Pink': '#ED64A6',
@@ -647,6 +686,11 @@
     }
 
     async function init() {
+      // Fetch public settings for Girls visibility
+      const settings = await fetchPublicSettings();
+      const girlsEnabled = settings.girls_section_enabled === 'true';
+      applyGirlsVisibility(girlsEnabled);
+
       if (urlGender === 'Boys') currentGender = 'Boys';
       if (urlCat) currentCat = urlCat;
       updateGenderUI();
@@ -654,9 +698,41 @@
       await loadFilterOptions();
       await loadProducts();
 
+      // Attach hover-flip listener to product grid
+      const grid = document.getElementById('products-grid');
+      if (grid) attachHoverFlip(grid);
+
       document.addEventListener('click', (e) => {
         if (!e.target.closest('.filter-dropdown')) closeAllDropdowns();
       });
+    }
+
+    async function fetchPublicSettings() {
+      const cached = sessionStorage.getItem('clothyk_public_settings');
+      if (cached) { try { return JSON.parse(cached); } catch(e) {} }
+      try {
+        const res = await fetch('/api/admin/public-settings');
+        const data = await res.json();
+        sessionStorage.setItem('clothyk_public_settings', JSON.stringify(data));
+        return data;
+      } catch(e) {
+        return { girls_section_enabled: 'false' };
+      }
+    }
+
+    function applyGirlsVisibility(enabled) {
+      document.querySelectorAll('.girls-nav-link').forEach(el => {
+        el.style.display = enabled ? '' : 'none';
+      });
+      const tabGirls = document.getElementById('tab-Girls');
+      if (tabGirls) tabGirls.style.display = enabled ? '' : 'none';
+      // If girls disabled and currently showing girls, redirect to boys
+      if (!enabled && currentGender === 'Girls') {
+        currentGender = 'Boys';
+        const url = new URL(window.location.href);
+        url.searchParams.set('gender', 'Boys');
+        window.history.replaceState({}, '', url);
+      }
     }
 
     function updateGenderUI() {
@@ -968,6 +1044,20 @@
       loadFilterOptions();
       loadProducts();
     }
+
+    // Patch renderProductCard to embed hover data attrs
+    const _origRender = window.renderProductCard;
+    window.renderProductCard = function(p) {
+      const html = _origRender ? _origRender(p) : '';
+      // Inject data-orig-img and data-hover-img into the card if 2+ images exist
+      const imgs = Array.isArray(p.images) && p.images.length > 1 ? p.images : null;
+      if (imgs) {
+        return html
+          .replace(/class="product-card"/, `class="product-card" data-orig-img="${imgs[0]}" data-hover-img="${imgs[1]}"`)
+          .replace(/(<img[^>]*class="product-img"[^>]*src=")[^"]*(")/, `$1${imgs[0]}$2`);
+      }
+      return html;
+    };
 
     init();
   </script>

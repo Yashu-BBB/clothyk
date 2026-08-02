@@ -11,7 +11,120 @@
   <meta property="og:image" id="og-image" content="">
   <link rel="stylesheet" href="/static/css/shared.css">
   <style>
-    /* ─── DETAIL LAYOUT ───────────────────────────────────── */
+    /* ─── IMAGE GALLERY ────────────────────────────────────── */
+    .gallery-wrap {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    /* Vertical thumbnail strip on left */
+    .thumb-strip {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 72px;
+      flex-shrink: 0;
+    }
+    .thumb-strip.hidden { display: none; }
+
+    .thumb-item {
+      width: 72px;
+      height: 90px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: border-color 0.2s, opacity 0.2s;
+      opacity: 0.65;
+    }
+    .thumb-item:hover { opacity: 0.9; }
+    .thumb-item.active {
+      border-color: #0A0A0A;
+      opacity: 1;
+    }
+
+    /* Main image + arrow buttons */
+    .main-img-container {
+      flex: 1;
+      position: relative;
+    }
+
+    .gallery-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 36px; height: 36px;
+      background: rgba(10,10,10,0.65);
+      border: none;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 4;
+      transition: background 0.2s;
+      backdrop-filter: blur(4px);
+    }
+    .gallery-arrow:hover { background: rgba(10,10,10,0.9); }
+    .gallery-arrow.hidden { display: none; }
+    .gallery-arrow-prev { left: 10px; }
+    .gallery-arrow-next { right: 10px; }
+
+    /* Desktop hover zoom */
+    .main-img-wrap img {
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+    .main-img-wrap:hover img {
+      transform: scale(1.04);
+    }
+
+    /* Mobile: dot indicators */
+    .gallery-dots {
+      display: none;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .gallery-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #D0D0D0;
+      transition: background 0.2s, transform 0.2s;
+      cursor: pointer;
+    }
+    .gallery-dot.active {
+      background: #0A0A0A;
+      transform: scale(1.2);
+    }
+
+    /* Mobile: image counter */
+    .gallery-counter {
+      display: none;
+      position: absolute;
+      bottom: 12px;
+      right: 14px;
+      background: rgba(10,10,10,0.55);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      padding: 3px 9px;
+      border-radius: 999px;
+      z-index: 4;
+      backdrop-filter: blur(4px);
+    }
+
+    @media (max-width: 768px) {
+      .thumb-strip { display: none !important; }
+      .gallery-dots { display: flex; }
+      .gallery-counter { display: block; }
+      .gallery-arrow { width: 30px; height: 30px; font-size: 0.85rem; }
+    }
+
+    /* ─── DETAIL LAYOUT ────────────────────────────────────── */
     .detail-wrap {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -401,7 +514,7 @@
     <a href="/" class="nav-logo">Clothyk</a>
     <div class="nav-links">
       <a href="/">Home</a>
-      <a href="/products">Shop</a>
+      <a href="/products" class="girls-nav-link" id="nav-shop-link">Shop</a>
       <a href="/wishlist">Wishlist</a>
     </div>
     <div class="nav-actions">
@@ -446,15 +559,26 @@
 
       <!-- IMAGE COLUMN -->
       <div class="img-col">
-        <div class="main-img-wrap">
-          <img id="product-img" src="" alt="">
-          <div class="img-badge">
-            <span id="stock-badge" class="badge badge-success">In Stock</span>
+        <div class="gallery-wrap" id="gallery-wrap">
+          <div class="thumb-strip hidden" id="thumb-strip"></div>
+          <div class="main-img-container">
+            <div class="main-img-wrap" id="main-img-wrap">
+              <img id="product-img" src="" alt="" loading="eager">
+              <div class="img-badge">
+                <span id="stock-badge" class="badge badge-success">In Stock</span>
+              </div>
+              <button class="img-wishlist" id="wishlist-toggle-btn" onclick="toggleWishlistProduct()">
+                <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              </button>
+              <span class="gallery-counter" id="gallery-counter">1 / 1</span>
+            </div>
+            <button class="gallery-arrow gallery-arrow-prev hidden" id="arrow-prev"
+              onclick="galleryPrev()" aria-label="Previous image">&#8592;</button>
+            <button class="gallery-arrow gallery-arrow-next hidden" id="arrow-next"
+              onclick="galleryNext()" aria-label="Next image">&#8594;</button>
           </div>
-          <button class="img-wishlist" id="wishlist-toggle-btn" onclick="toggleWishlistProduct()">
-            <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-          </button>
         </div>
+        <div class="gallery-dots" id="gallery-dots"></div>
       </div>
 
       <!-- INFO COLUMN -->
@@ -559,13 +683,13 @@
         <div class="footer-brand">Clothyk</div>
         <p class="footer-tagline">Curated fashion across India</p>
         <div class="footer-links">
-          <a href="/products?gender=Girls">Girls</a>
+          <a href="/products?gender=Girls" class="girls-nav-link">Girls</a>
           <a href="/products?gender=Boys">Boys</a>
           <a href="/cart">Cart</a>
         </div>
       </div>
     </div>
-    <p class="footer-copy">© 2025 Clothyk. All rights reserved.</p>
+    <p class="footer-copy">&copy; 2025 Clothyk. All rights reserved.</p>
   </footer>
 
   <!-- Size Guide Modal -->
@@ -600,7 +724,141 @@
     let selectedSize = null;
     let selectedColor = null;
 
+    // ─── IMAGE GALLERY STATE ─────────────────────────────────────────
+    let galleryImages = [];
+    let currentIndex = 0;
+
+    function initGallery(images) {
+      galleryImages = images;
+      currentIndex = 0;
+      const hasMultiple = images.length > 1;
+
+      const thumbStrip  = document.getElementById('thumb-strip');
+      const dotsEl      = document.getElementById('gallery-dots');
+      const arrowPrev   = document.getElementById('arrow-prev');
+      const arrowNext   = document.getElementById('arrow-next');
+      const counterEl   = document.getElementById('gallery-counter');
+
+      // Thumbnail strip
+      if (hasMultiple) {
+        thumbStrip.classList.remove('hidden');
+        thumbStrip.innerHTML = images.map((src, i) =>
+          `<img src="${src}" class="thumb-item${i === 0 ? ' active' : ''}" loading="${i === 0 ? 'eager' : 'lazy'}"
+                onclick="showImage(${i})" alt="View ${i+1}">`
+        ).join('');
+      } else {
+        thumbStrip.classList.add('hidden');
+        thumbStrip.innerHTML = '';
+      }
+
+      // Dots
+      if (hasMultiple) {
+        dotsEl.innerHTML = images.map((_, i) =>
+          `<div class="gallery-dot${i === 0 ? ' active' : ''}" onclick="showImage(${i})"></div>`
+        ).join('');
+      } else {
+        dotsEl.innerHTML = '';
+      }
+
+      // Arrows
+      if (hasMultiple) {
+        arrowPrev.classList.remove('hidden');
+        arrowNext.classList.remove('hidden');
+      } else {
+        arrowPrev.classList.add('hidden');
+        arrowNext.classList.add('hidden');
+      }
+
+      // Counter
+      counterEl.textContent = hasMultiple ? `1 / ${images.length}` : '';
+
+      showImage(0, false /* no transition on init */);
+
+      // Touch swipe support (mobile carousel)
+      const mainWrap = document.getElementById('main-img-wrap');
+      let touchStartX = 0;
+      mainWrap.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+      mainWrap.addEventListener('touchend', e => {
+        const diff = touchStartX - e.changedTouches[0].clientX;
+        if (Math.abs(diff) > 50) {
+          diff > 0 ? galleryNext() : galleryPrev();
+        }
+      });
+    }
+
+    function showImage(index, animate = true) {
+      if (!galleryImages.length) return;
+      // Clamp index
+      currentIndex = (index + galleryImages.length) % galleryImages.length;
+
+      const mainImg = document.getElementById('product-img');
+      const counterEl = document.getElementById('gallery-counter');
+
+      // Fade transition
+      if (animate) {
+        mainImg.style.transition = 'opacity 0.3s ease';
+        mainImg.style.opacity = '0';
+        setTimeout(() => {
+          mainImg.src = galleryImages[currentIndex];
+          mainImg.style.opacity = '1';
+        }, 150);
+      } else {
+        mainImg.style.transition = 'none';
+        mainImg.src = galleryImages[currentIndex];
+        mainImg.style.opacity = '1';
+      }
+
+      // Update thumbnails
+      document.querySelectorAll('.thumb-item').forEach((el, i) => {
+        el.classList.toggle('active', i === currentIndex);
+      });
+
+      // Update dots
+      document.querySelectorAll('.gallery-dot').forEach((el, i) => {
+        el.classList.toggle('active', i === currentIndex);
+      });
+
+      // Update counter
+      if (galleryImages.length > 1) {
+        counterEl.textContent = `${currentIndex + 1} / ${galleryImages.length}`;
+      }
+    }
+
+    function galleryNext() {
+      showImage(currentIndex + 1);
+    }
+
+    function galleryPrev() {
+      showImage(currentIndex - 1);
+    }
+
+    // ─── PUBLIC SETTINGS (Girls visibility) ──────────────────────────────
+    async function fetchPublicSettings() {
+      const cached = sessionStorage.getItem('clothyk_public_settings');
+      if (cached) { try { return JSON.parse(cached); } catch(e) {} }
+      try {
+        const res = await fetch('/api/admin/public-settings');
+        const data = await res.json();
+        sessionStorage.setItem('clothyk_public_settings', JSON.stringify(data));
+        return data;
+      } catch(e) {
+        return { girls_section_enabled: 'false' };
+      }
+    }
+
+    function applyGirlsVisibility(enabled) {
+      document.querySelectorAll('.girls-nav-link').forEach(el => {
+        el.style.display = enabled ? '' : 'none';
+      });
+    }
+
     async function loadProduct() {
+      // Fetch public settings (girls visibility) in parallel with product
+      const [settings] = await Promise.all([
+        fetchPublicSettings(),
+      ]);
+      applyGirlsVisibility(settings.girls_section_enabled === 'true');
+
       try {
         product = await apiFetch(`/api/products/${productId}`);
 
@@ -611,8 +869,13 @@
         document.getElementById("og-image").content = product.image || "";
         document.getElementById("breadcrumb-name").textContent = product.name;
 
-        document.getElementById("product-img").src = product.image || "/static/images/placeholder.svg";
+        // ─── GALLERY ──────────────────────────────────────────────────
+        const images = (Array.isArray(product.images) && product.images.length > 0)
+          ? product.images
+          : (product.image ? [product.image] : ['/static/images/placeholder.svg']);
         document.getElementById("product-img").alt = product.name;
+        initGallery(images);
+
         document.getElementById("product-name").textContent = product.name;
         // Price with discount
         const hasDis = product.mrp && product.mrp > product.our_price;

@@ -415,7 +415,7 @@
     <a href="/" class="nav-logo">Clothyk</a>
     <div class="nav-links">
       <a href="/">Home</a>
-      <a href="/products?gender=Girls">Girls</a>
+      <a href="/products?gender=Girls" class="girls-nav-link">Girls</a>
       <a href="/products?gender=Boys">Boys</a>
       <a href="/wishlist">Wishlist</a>
     </div>
@@ -437,7 +437,7 @@
   <!-- MOBILE NAV -->
   <div id="mobile-nav" class="mobile-nav">
     <a href="/">Home</a>
-    <a href="/products?gender=Girls">Girls Collection</a>
+    <a href="/products?gender=Girls" class="girls-nav-link">Girls Collection</a>
     <a href="/products?gender=Boys">Boys Collection</a>
     <a href="/wishlist">Wishlist</a>
     <a href="/cart">Cart</a>
@@ -466,7 +466,7 @@
       </h1>
       <p class="hero-sub">Curated fashion for Boys & Girls — from local boutiques, delivered across India. Order instantly via WhatsApp.</p>
       <div class="hero-actions">
-        <a href="/products?gender=Girls" class="btn btn-primary btn-lg">Shop Girls</a>
+        <a href="/products?gender=Girls" id="hero-btn-girls" class="btn btn-primary btn-lg">Shop Girls</a>
         <a href="/products?gender=Boys" class="btn btn-outline btn-lg">Shop Boys</a>
       </div>
     </div>
@@ -496,7 +496,7 @@
   <section class="gender-section">
     <div class="container">
 
-      <div class="gender-toggle-wrap">
+      <div class="gender-toggle-wrap" id="gender-toggle-wrap">
         <button class="gender-btn active" id="btn-Girls" onclick="switchGender('Girls')">Girls</button>
         <button class="gender-btn" id="btn-Boys" onclick="switchGender('Boys')">Boys</button>
       </div>
@@ -563,7 +563,7 @@
         <div class="footer-brand">Clothyk</div>
         <p class="footer-tagline">Curated fashion from local boutiques across India</p>
         <div class="footer-links">
-          <a href="/products?gender=Girls">Girls</a>
+          <a href="/products?gender=Girls" class="girls-nav-link">Girls</a>
           <a href="/products?gender=Boys">Boys</a>
           <a href="/cart">Cart</a>
           <a href="/wishlist">Wishlist</a>
@@ -585,8 +585,53 @@
   <script>
     let currentGender = 'Girls';
     let selectedCat = { Girls: null, Boys: null };
+    let girlsEnabled = true; // default; overridden after public-settings fetch
+
+    async function fetchPublicSettings() {
+      // Check sessionStorage first (valid for browser session)
+      const cached = sessionStorage.getItem('clothyk_public_settings');
+      if (cached) {
+        try { return JSON.parse(cached); } catch(e) {}
+      }
+      try {
+        const res = await fetch('/api/admin/public-settings');
+        const data = await res.json();
+        sessionStorage.setItem('clothyk_public_settings', JSON.stringify(data));
+        return data;
+      } catch(e) {
+        return { girls_section_enabled: 'false', delivery_fee: '0' };
+      }
+    }
+
+    function applyGirlsVisibility(enabled) {
+      girlsEnabled = enabled;
+      // Hide/show all Girls nav links
+      document.querySelectorAll('.girls-nav-link').forEach(el => {
+        el.style.display = enabled ? '' : 'none';
+      });
+      // Hero "Shop Girls" button
+      const heroGirls = document.getElementById('hero-btn-girls');
+      if (heroGirls) heroGirls.style.display = enabled ? '' : 'none';
+      // Gender toggle tab
+      const btnGirls = document.getElementById('btn-Girls');
+      if (btnGirls) btnGirls.style.display = enabled ? '' : 'none';
+      // Girls panel
+      const panelGirls = document.getElementById('panel-Girls');
+      if (!enabled && panelGirls) {
+        panelGirls.classList.remove('active');
+        // Activate Boys panel
+        document.getElementById('btn-Boys')?.classList.add('active');
+        document.getElementById('panel-Boys')?.classList.add('active');
+        currentGender = 'Boys';
+      }
+    }
 
     async function init() {
+      // Fetch settings first so UI is correct before rendering
+      const settings = await fetchPublicSettings();
+      const enabled = settings.girls_section_enabled === 'true';
+      applyGirlsVisibility(enabled);
+
       await Promise.all([loadCategories('Girls'), loadCategories('Boys')]);
       loadProducts('Girls');
       loadProducts('Boys');

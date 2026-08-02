@@ -1,7 +1,7 @@
 import logging
-from fastapi import APIRouter, Request, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Request, Depends, HTTPException, UploadFile, File, Form, Query
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import json
 import uuid
 
@@ -15,7 +15,7 @@ from utils.auth_utils import require_admin
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-SAFE_FIELDS = "id,name,description,our_price,mrp,sizes,colors,image,category,gender,featured,stock,shopkeeper_code,view_count,created_at"
+SAFE_FIELDS = "id,name,description,our_price,mrp,sizes,colors,image,images,category,gender,featured,stock,shopkeeper_code,view_count,created_at,size_chart"
 
 
 # ─── PUBLIC ENDPOINTS ─────────────────────────────────────────────────────
@@ -247,7 +247,9 @@ async def add_product(
     stock: int = Form(1),
     mrp: float = Form(None),
     shopkeeper_id: int = Form(...),
-    image: Optional[UploadFile] = File(None),
+    size_chart: str = Form(None),
+    clear_size_chart: str = Form("false"),
+    images: List[UploadFile] = File(default=[]),
     admin=Depends(require_admin)
 ):
     try:
@@ -256,13 +258,29 @@ async def add_product(
             raise HTTPException(status_code=404, detail="Shopkeeper not found")
         shopkeeper_code = f"#{sk.data['id']:03d}"
 
-        image_url = None
-        if image and image.filename:
-            contents = await image.read()
-            ext = image.filename.split(".")[-1]
+        # Upload each image (max 6) to Supabase storage
+        image_urls = []
+        valid_images = [img for img in images if img and img.filename]
+        for img in valid_images[:6]:
+            contents = await img.read()
+            ext = img.filename.rsplit(".", 1)[-1].lower()
             fname = f"{uuid.uuid4()}.{ext}"
-            supabase_admin.storage.from_("product-images").upload(fname, contents, {"content-type": image.content_type})
-            image_url = supabase_admin.storage.from_("product-images").get_public_url(fname)
+            supabase_admin.storage.from_("product-images").upload(
+                fname, contents, {"content-type": img.content_type or "image/jpeg"}
+            )
+            url = supabase_admin.storage.from_("product-images").get_public_url(fname)
+            image_urls.append(url)
+
+        # First image = primary (backward compat)
+        primary_image = image_urls[0] if image_urls else None
+
+        # Parse size chart
+        parsed_size_chart = None
+        if size_chart and size_chart.strip() and clear_size_chart != "true":
+            try:
+                parsed_size_chart = json.loads(size_chart)
+            except Exception:
+                parsed_size_chart = None
 
         product = {
             "name": name,
@@ -278,7 +296,9 @@ async def add_product(
             "stock": stock,
             "shopkeeper_id": shopkeeper_id,
             "shopkeeper_code": shopkeeper_code,
-            "image": image_url
+            "image": primary_image,
+            "images": image_urls,
+            "size_chart": parsed_size_chart,
         }
         res = supabase_admin.table("products").insert(product).execute()
         await cache_clear_pattern("products:*")
@@ -308,7 +328,10 @@ async def edit_product(
     stock: int = Form(None),
     mrp: float = Form(None),
     shopkeeper_id: int = Form(None),
-    image: Optional[UploadFile] = File(None),
+    size_chart: str = Form(None),
+    clear_size_chart: str = Form("false"),
+    keep_images: str = Form("[]"),       # JSON array of existing image URLs to keep
+    new_images: List[UploadFile] = File(default=[]),   # newly uploaded images
     admin=Depends(require_admin)
 ):
     try:
@@ -328,12 +351,48 @@ async def edit_product(
             updates["shopkeeper_id"] = shopkeeper_id
             updates["shopkeeper_code"] = f"#{shopkeeper_id:03d}"
 
-        if image and image.filename:
-            contents = await image.read()
-            ext = image.filename.split(".")[-1]
+        # Size chart
+        if clear_size_chart == "true":
+            updates["size_chart"] = None
+        elif size_chart and size_chart.strip():
+            try:
+                updates["size_chart"] = json.loads(size_chart)
+            except Exception:
+                pass
+
+        # Multi-image handling
+        existing_urls = []
+        try:
+            existing_urls = json.loads(keep_images) if keep_images else []
+        except Exception:
+            existing_urls = []
+
+        # Upload new images
+        new_urls = []
+        valid_new = [img for img in new_images if img and img.filename]
+        slots_remaining = max(0, 6 - len(existing_urls))
+        for img in valid_new[:slots_remaining]:
+            contents = await img.read()
+            ext = img.filename.rsplit(".", 1)[-1].lower()
             fname = f"{uuid.uuid4()}.{ext}"
-            supabase_admin.storage.from_("product-images").upload(fname, contents, {"content-type": image.content_type})
-            updates["image"] = supabase_admin.storage.from_("product-images").get_public_url(fname)
+            supabase_admin.storage.from_("product-images").upload(
+                fname, contents, {"content-type": img.content_type or "image/jpeg"}
+            )
+            url = supabase_admin.storage.from_("product-images").get_public_url(fname)
+            new_urls.append(url)
+
+        # Merge and cap at 6
+        all_image_urls = (existing_urls + new_urls)[:6]
+
+        # Only update images if the field was explicitly sent (keep_images or new_images present)
+        if keep_images != "[]" or valid_new:
+            updates["images"] = all_image_urls
+            updates["image"] = all_image_urls[0] if all_image_urls else None
+        elif valid_new:
+            # new images only (no keep_images sent) — append to existing
+            if new_urls:
+                updates["images"] = new_urls
+                updates["image"] = new_urls[0]
 
         res = supabase_admin.table("products").update(updates).eq("id", product_id).execute()
         await cache_clear_pattern("products:*")
@@ -344,6 +403,38 @@ async def edit_product(
     except Exception as e:
         logger.error(f"Failed to edit product: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to edit product: {str(e)}")
+
+
+@router.delete("/admin/{product_id}/image")
+async def delete_product_image(
+    product_id: str,
+    image_url: str = Query(...),
+    admin=Depends(require_admin)
+):
+    """Remove a single image URL from the product's images array."""
+    try:
+        res = supabase_admin.table("products").select("image,images").eq("id", product_id).single().execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Product not found")
+
+        current_images = res.data.get("images") or []
+        updated_images = [u for u in current_images if u != image_url]
+        primary = updated_images[0] if updated_images else None
+
+        supabase_admin.table("products").update({
+            "images": updated_images,
+            "image": primary
+        }).eq("id", product_id).execute()
+
+        await cache_clear_pattern("products:*")
+        mem_clear_pattern("product:")
+        logger.info(f"Image removed from product {product_id} by admin {admin['sub']}")
+        return {"success": True, "images": updated_images}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete product image: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete image")
 
 
 @router.delete("/admin/{product_id}")

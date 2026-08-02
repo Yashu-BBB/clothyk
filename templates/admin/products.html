@@ -11,6 +11,51 @@
     .product-thumb { width: 48px; height: 60px; object-fit: cover; border-radius: 6px; }
     .img-preview { width: 100%; max-height: 200px; object-fit: cover; border-radius: 10px; margin-top: 8px; display: none; }
 
+    /* ─── Multi-Image Uploader ────────────────────────────────── */
+    .multi-img-uploader { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; align-items:flex-start; }
+    .img-slot {
+      position:relative; width:80px; height:100px; border-radius:10px;
+      overflow:hidden; flex-shrink:0; background:#F5F5F5;
+      border:2px solid var(--border); cursor:grab;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .img-slot:active { cursor:grabbing; }
+    .img-slot.drag-over { border-color:var(--primary); box-shadow:0 0 0 2px rgba(0,0,0,0.15); }
+    .img-slot.is-main { border-color:#0A0A0A; }
+    .img-slot img { width:100%; height:100%; object-fit:cover; display:block; }
+    .img-slot-remove {
+      position:absolute; top:3px; right:3px; width:20px; height:20px;
+      background:rgba(0,0,0,0.65); color:#fff; border:none; border-radius:50%;
+      font-size:0.8rem; line-height:1; cursor:pointer; display:flex;
+      align-items:center; justify-content:center; z-index:2;
+    }
+    .img-slot-remove:hover { background:#C0392B; }
+    .img-slot-star {
+      position:absolute; bottom:3px; left:4px; font-size:0.65rem;
+      background:rgba(0,0,0,0.7); color:#FFD700; border-radius:3px;
+      padding:1px 4px; z-index:2; pointer-events:none;
+    }
+    .img-slot-loading {
+      position:absolute; inset:0; background:rgba(255,255,255,0.85);
+      display:flex; align-items:center; justify-content:center; z-index:3;
+    }
+    .img-slot-loading::after {
+      content:''; width:20px; height:20px; border:2px solid #E0E0E0;
+      border-top-color:#0A0A0A; border-radius:50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .img-add-slot {
+      width:80px; height:100px; border-radius:10px; flex-shrink:0;
+      border:2px dashed var(--border); background:transparent;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:4px; cursor:pointer; font-size:0.7rem; color:#9B9B9B;
+      transition:border-color 0.2s, color 0.2s; font-family:var(--font-body);
+    }
+    .img-add-slot:hover { border-color:#0A0A0A; color:#0A0A0A; }
+    .img-add-slot .plus { font-size:1.4rem; line-height:1; }
+    .img-count-label { font-size:0.78rem; color:var(--muted); margin-top:6px; }
+
     /* ─── Size Selector ─────────────────────────────────── */
     .size-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
     .size-chip {
@@ -253,11 +298,14 @@
         </label>
       </div>
 
-      <!-- Image -->
+      <!-- Images -->
       <div class="form-group">
-        <label class="form-label">Product Image</label>
-        <input class="form-control" type="file" name="image" accept="image/*" onchange="previewImg(this)">
-        <img class="img-preview" id="img-preview">
+        <label class="form-label">Product Images (1–6 photos)</label>
+        <div class="multi-img-uploader" id="img-uploader"></div>
+        <div class="img-count-label" id="img-count">0/6 images · First image = main product photo</div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">Drag to reorder · Accepts JPG, PNG, WEBP</div>
+        <!-- hidden file input -->
+        <input type="file" id="img-file-picker" accept="image/jpeg,image/png,image/webp" multiple style="display:none" onchange="onImageFilePicked(this)">
       </div>
 
       <div style="display:flex;gap:12px;margin-top:8px">
@@ -273,6 +321,104 @@
 <script>
 let editingId = null;
 let selectedSizes = [];
+
+// ─── MULTI-IMAGE UPLOADER ──────────────────────────────────────────────────
+// Each entry: { type: 'existing'|'new', url: string, file?: File }
+let imageSlots = [];
+const MAX_IMAGES = 6;
+
+function renderImageUploader() {
+  const container = document.getElementById('img-uploader');
+  const countEl   = document.getElementById('img-count');
+  container.innerHTML = '';
+
+  imageSlots.forEach((slot, idx) => {
+    const div = document.createElement('div');
+    div.className = 'img-slot' + (idx === 0 ? ' is-main' : '');
+    div.draggable = true;
+    div.dataset.idx = idx;
+
+    const img = document.createElement('img');
+    img.src = slot.url;
+    img.alt = `Image ${idx + 1}`;
+    div.appendChild(img);
+
+    // Remove button
+    const rmBtn = document.createElement('button');
+    rmBtn.type = 'button';
+    rmBtn.className = 'img-slot-remove';
+    rmBtn.title = 'Remove image';
+    rmBtn.textContent = '×';
+    rmBtn.onclick = (e) => { e.stopPropagation(); removeImageSlot(idx); };
+    div.appendChild(rmBtn);
+
+    // Star badge on first image
+    if (idx === 0) {
+      const star = document.createElement('span');
+      star.className = 'img-slot-star';
+      star.textContent = '☆ Main';
+      div.appendChild(star);
+    }
+
+    // Drag-and-drop reorder
+    div.addEventListener('dragstart', e => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', idx);
+      div.style.opacity = '0.5';
+    });
+    div.addEventListener('dragend', () => div.style.opacity = '1');
+    div.addEventListener('dragover', e => { e.preventDefault(); div.classList.add('drag-over'); });
+    div.addEventListener('dragleave', () => div.classList.remove('drag-over'));
+    div.addEventListener('drop', e => {
+      e.preventDefault();
+      div.classList.remove('drag-over');
+      const fromIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
+      const toIdx   = parseInt(div.dataset.idx, 10);
+      if (fromIdx !== toIdx) {
+        const [moved] = imageSlots.splice(fromIdx, 1);
+        imageSlots.splice(toIdx, 0, moved);
+        renderImageUploader();
+      }
+    });
+
+    container.appendChild(div);
+  });
+
+  // Add button (if < MAX_IMAGES)
+  if (imageSlots.length < MAX_IMAGES) {
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'img-add-slot';
+    addBtn.innerHTML = '<span class="plus">+</span><span>Add</span>';
+    addBtn.onclick = () => document.getElementById('img-file-picker').click();
+    container.appendChild(addBtn);
+  }
+
+  countEl.textContent = `${imageSlots.length}/${MAX_IMAGES} images · First image = main product photo`;
+}
+
+function removeImageSlot(idx) {
+  imageSlots.splice(idx, 1);
+  renderImageUploader();
+}
+
+function onImageFilePicked(input) {
+  const files = Array.from(input.files || []);
+  input.value = ''; // reset so same file can be re-picked
+  const remaining = MAX_IMAGES - imageSlots.length;
+  files.slice(0, remaining).forEach(file => {
+    // Create a local object URL for preview immediately
+    const url = URL.createObjectURL(file);
+    imageSlots.push({ type: 'new', file, url });
+  });
+  renderImageUploader();
+}
+
+function loadExistingImages(images) {
+  // images: array of URL strings from product.images
+  imageSlots = (images || []).map(url => ({ type: 'existing', url }));
+  renderImageUploader();
+}
 
 // ─── SIZE CHART ─────────────────────────────────────────────────────────────
 const SIZE_CHART_PRESETS = {
@@ -648,15 +794,16 @@ async function loadShopkeeperDropdown(currentVal = '') {
 function openModal() {
   editingId = null;
   selectedSizes = [];
+  imageSlots = [];
   document.getElementById("modal-title").textContent = "Add Product";
   document.getElementById("product-form").reset();
-  document.getElementById("img-preview").style.display = "none";
   document.getElementById("modal-alert").innerHTML = "";
   selectGender('Girls');
   loadSizePreset('standard', document.querySelector('.size-type-tab'));
   clearSizeChart();
   document.getElementById("size-chart-hidden").value = "";
   document.getElementById("clear-size-chart-hidden").value = "false";
+  renderImageUploader();
   loadShopkeeperDropdown();
   document.getElementById("product-modal").classList.add("open");
 }
@@ -698,10 +845,11 @@ function openEdit(p) {
   renderSizeChips(presetType === 'custom' ? selectedSizes : (presetType === 'freesize' ? ['Free Size'] : SIZE_PRESETS[presetType]));
   document.getElementById('custom-size-wrap').style.display = presetType === 'custom' ? 'block' : 'none';
 
-  if (p.image) {
-    document.getElementById("img-preview").src = p.image;
-    document.getElementById("img-preview").style.display = "block";
-  }
+  // Load existing images into uploader
+  const existingImages = Array.isArray(p.images) && p.images.length > 0
+    ? p.images
+    : (p.image ? [p.image] : []);
+  loadExistingImages(existingImages);
 
   // Size chart
   let sizeChart = p.size_chart;
@@ -741,15 +889,42 @@ document.getElementById("product-form").addEventListener("submit", async functio
 
   syncSizeChartHidden();
 
-  const fd = new FormData(this);
-  const colorsRaw = fd.get("colors_raw") || "";
-  fd.delete("colors_raw");
-  fd.set("sizes", JSON.stringify(selectedSizes));
-  fd.set("colors", JSON.stringify(colorsRaw.split(",").map(c => c.trim()).filter(Boolean)));
-  fd.set("featured", document.getElementById("featured-cb").checked);
-  fd.set("gender", document.getElementById("gender-val").value);
-  fd.delete("sizes_raw");
-  if (!fd.get("size_chart")) fd.delete("size_chart");
+  const fd = new FormData();
+
+  // Standard fields
+  const form = this;
+  fd.append('name', form.name.value);
+  fd.append('description', form.description.value || '');
+  fd.append('our_price', form.our_price.value);
+  fd.append('shopkeeper_price', form.shopkeeper_price.value);
+  fd.append('stock', form.stock.value);
+  fd.append('mrp', form.mrp?.value || '');
+  fd.append('sizes', JSON.stringify(selectedSizes));
+  const colorsRaw = form.colors_raw?.value || '';
+  fd.append('colors', JSON.stringify(colorsRaw.split(',').map(c => c.trim()).filter(Boolean)));
+  fd.append('featured', document.getElementById('featured-cb').checked);
+  fd.append('gender', document.getElementById('gender-val').value);
+  fd.append('category', form.category?.value || document.getElementById('category-select').value || '');
+  fd.append('shopkeeper_id', document.getElementById('sk-select').value);
+
+  // Size chart
+  const scHidden = document.getElementById('size-chart-hidden').value;
+  if (scHidden) fd.append('size_chart', scHidden);
+  fd.append('clear_size_chart', document.getElementById('clear-size-chart-hidden').value || 'false');
+
+  // Images: separate existing (keep) vs new (file upload)
+  const keepUrls = imageSlots.filter(s => s.type === 'existing').map(s => s.url);
+  const newFiles = imageSlots.filter(s => s.type === 'new').map(s => s.file);
+
+  if (editingId) {
+    // Edit mode: send keep_images + new_images[]
+    fd.append('keep_images', JSON.stringify(keepUrls));
+    newFiles.forEach(f => fd.append('new_images', f));
+  } else {
+    // Add mode: send images[]
+    newFiles.forEach(f => fd.append('images', f));
+    // If any existing-type somehow present (shouldn't happen on add), ignore
+  }
 
   try {
     const url = editingId ? `/api/products/admin/${editingId}` : "/api/products/admin/add";
