@@ -4,7 +4,7 @@ import logging
 import qrcode
 import requests
 import base64
-
+from utils.db import supabase_admin
 logger = logging.getLogger(__name__)
 
 WA_NUMBER = os.getenv("WHATSAPP_NUMBER", "")
@@ -78,6 +78,31 @@ def send_image_url(to: str, image_url: str, caption: str = "") -> bool:
         "caption": caption,
     }
     return _post("send-image", payload)
+
+
+def send_file(to: str, file_url: str, filename: str = "file", caption: str = "") -> bool:
+    """Send a file by URL or path."""
+    payload = {
+        "session": WPP_SESSION,
+        "to": _to_wpp_number(to),
+        "file": file_url,
+        "filename": filename,
+        "caption": caption,
+    }
+    return _post("send-file", payload)
+
+
+def send_file_base64(to: str, file_bytes: bytes, filename: str = "file.pdf", caption: str = "") -> bool:
+    """Send a file (e.g. a generated PDF) from raw bytes."""
+    b64 = base64.b64encode(file_bytes).decode()
+    payload = {
+        "session": WPP_SESSION,
+        "to": _to_wpp_number(to),
+        "file": f"data:application/pdf;base64,{b64}",
+        "filename": filename,
+        "caption": caption,
+    }
+    return _post("send-file", payload)
 
 
 def generate_upi_qr(order_id: str, amount: float) -> bytes:

@@ -1,4 +1,5 @@
 import logging
+import requests
 from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel
 from slowapi import Limiter
@@ -6,8 +7,9 @@ from slowapi.util import get_remote_address
 from utils.db import supabase_admin
 from utils.auth_utils import require_admin
 from utils.captcha import verify_turnstile
-from utils.whatsapp_utils import send_text, send_image_url, send_upi_qr, msg_order_received, msg_shipped, msg_refund_processed
+from utils.whatsapp_utils import send_text, send_image_url, send_file_base64, send_upi_qr, msg_order_received, msg_shipped, msg_refund_processed
 from utils.nimbuspost import create_shipment
+from utils.label_generator import build_shopkeeper_package_pdf
 from utils.cache import cache_get, cache_set, cache_delete, two_layer_get, two_layer_set
 
 logger = logging.getLogger(__name__)
@@ -74,6 +76,28 @@ async def public_delivery_fee():
     return result
 
 
+def _send_shopkeeper_package_pdf(order: dict, shopkeeper: dict, nimbuspost_label_bytes: bytes | None):
+    """
+    Builds the 2-page shopkeeper PDF (product photo + either NimbusPost's
+    untouched label or our own fallback slip) and sends it via WhatsApp.
+    Never raises — a notification failure must never block order/shipment
+    processing.
+    """
+    try:
+        contact = shopkeeper.get("contact") if shopkeeper else None
+        if not contact:
+            logger.warning(f"Shopkeeper has no contact number — skipping package PDF for order {order.get('id')}")
+            return
+        pdf_bytes = build_shopkeeper_package_pdf(order, shopkeeper, nimbuspost_label_bytes)
+        send_file_base64(
+            contact, pdf_bytes,
+            filename=f"order_{str(order.get('id'))[:8]}.pdf",
+            caption="📦 New order — photo on page 1, shipping details on page 2. Print double-sided and attach to the package."
+        )
+    except Exception as e:
+        logger.warning(f"Shopkeeper package PDF failed for order {order.get('id')}: {e}")
+
+
 def create_shipment_for_order(order: dict) -> dict | None:
     """
     Fetches the order's shopkeeper and calls NimbusPost to create a
@@ -99,11 +123,17 @@ def create_shipment_for_order(order: dict) -> dict | None:
         shopkeeper = sk_res.data
         if not shopkeeper or not shopkeeper.get("address"):
             logger.warning(f"Shopkeeper {shopkeeper_id} has no registered address — cannot create shipment for order {order['id']}")
+            # No NimbusPost label possible without an address — send the
+            # fallback package PDF instead, so the shopkeeper still gets
+            # the photo + order details to work from.
+            if shopkeeper:
+                _send_shopkeeper_package_pdf(order, shopkeeper, None)
             return None
 
         result = create_shipment(order, shopkeeper)
         if not result:
             supabase_admin.table("orders").update({"shipping_status": "failed"}).eq("id", order["id"]).execute()
+            _send_shopkeeper_package_pdf(order, shopkeeper, None)
             return None
 
         supabase_admin.table("orders").update({
@@ -122,6 +152,19 @@ def create_shipment_for_order(order: dict) -> dict | None:
         send_text(order["customer_phone"], msg_shipped(
             order["product_name"], result["courier_name"] or "Courier", result["awb"], tracking_url
         ))
+
+        # Fetch NimbusPost's own official label and merge it (untouched —
+        # never edited, so the barcode/AWB stays valid) with our product
+        # photo page, then send the combined PDF to the shopkeeper.
+        label_bytes = None
+        if result.get("label_url"):
+            try:
+                label_resp = requests.get(result["label_url"], timeout=15)
+                label_resp.raise_for_status()
+                label_bytes = label_resp.content
+            except Exception as e:
+                logger.warning(f"Could not fetch NimbusPost label PDF for order {order['id']}: {e}")
+        _send_shopkeeper_package_pdf(order, shopkeeper, label_bytes)
 
         return result
     except Exception as e:
@@ -293,36 +336,26 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
                 order["product_name"], order["size"], order["color"], total_amount, delivery_fee
             ))
 
-            # Also notify the shopkeeper who supplies this product, so they
-            # know what to prepare. Non-fatal — a notification failure must
-            # never block the order confirmation itself.
-            try:
-                shopkeeper_id = order.get("shopkeeper_id")
-                if shopkeeper_id:
-                    sk_res = supabase_admin.table("shopkeepers").select("*").eq("id", shopkeeper_id).single().execute()
-                    shopkeeper = sk_res.data
-                    if shopkeeper and shopkeeper.get("contact"):
-                        sk_message = (
-                            f"✅ Order Confirmed — Please Prepare!\n\n"
-                            f"Product: {order['product_name']}\n"
-                            f"Code: {order.get('shopkeeper_code') or '—'}\n"
-                            f"Size: {order['size']} | Color: {order['color']}\n\n"
-                            f"👤 Ship To:\n"
-                            f"Name: {order['customer_name']}\n"
-                            f"Address: {order['customer_address']}\n"
-                            f"City: {order['customer_city']}\n"
-                            f"Pincode: {order.get('customer_pincode') or '—'}"
-                        )
-                        if order.get("product_image"):
-                            send_image_url(shopkeeper["contact"], order["product_image"], sk_message)
+            # Send the shopkeeper their package PDF (product photo + either
+            # NimbusPost's label or our fallback slip). If auto-ship is on,
+            # create_shipment_for_order() below decides success/failure and
+            # sends it exactly once from there — sending it here too would
+            # duplicate it. If auto-ship is off, no shipment will ever be
+            # attempted automatically, so send the fallback version now.
+            if not _is_auto_ship_enabled():
+                try:
+                    shopkeeper_id = order.get("shopkeeper_id")
+                    if shopkeeper_id:
+                        sk_res = supabase_admin.table("shopkeepers").select("*").eq("id", shopkeeper_id).single().execute()
+                        shopkeeper = sk_res.data
+                        if shopkeeper:
+                            _send_shopkeeper_package_pdf(order, shopkeeper, None)
                         else:
-                            send_text(shopkeeper["contact"], sk_message)
+                            logger.warning(f"Shopkeeper {shopkeeper_id} not found — skipping package PDF")
                     else:
-                        logger.warning(f"Shopkeeper {shopkeeper_id} has no contact number — skipping notification")
-                else:
-                    logger.warning(f"Order {order_id} has no shopkeeper_id — skipping shopkeeper notification")
-            except Exception as e:
-                logger.warning(f"Shopkeeper notification failed for order {order_id}: {e}")
+                        logger.warning(f"Order {order_id} has no shopkeeper_id — skipping package PDF")
+                except Exception as e:
+                    logger.warning(f"Shopkeeper package PDF failed for order {order_id}: {e}")
 
         if update.refund_status == "processed":
             send_text(phone, msg_refund_processed(total_amount))
