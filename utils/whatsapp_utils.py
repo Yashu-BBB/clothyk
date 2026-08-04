@@ -140,12 +140,17 @@ def send_upi_qr(to: str, order_id: str, amount: float) -> bool:
 
 # ─── Message Templates (unchanged) ─────────────────────────────────────────
 
-def msg_order_received(name: str, product: str, size: str, color: str, amount: float) -> str:
+def msg_order_received(name: str, product: str, size: str, color: str, amount: float, delivery_fee: float = 0) -> str:
+    breakdown = (
+        f"Item: ₹{amount - delivery_fee:.0f}\n"
+        f"Delivery: ₹{delivery_fee:.0f}\n"
+        f"Total: ₹{amount:.0f}\n\n"
+    ) if delivery_fee else f"Total: ₹{amount:.0f}\n\n"
     return (
         f"Hi {name}! 👋\n"
         f"We received your order for\n"
         f"*{product}* (Size {size}, {color})\n"
-        f"Total: ₹{amount:.0f}\n\n"
+        f"{breakdown}"
         f"How would you like to pay?\n"
         f"Reply:\n"
         f"1️⃣ UPI (GPay/PhonePe/Paytm)\n"
@@ -166,13 +171,18 @@ def msg_screenshot_received() -> str:
         "You will be notified once confirmed"
     )
 
-def msg_payment_confirmed(product: str, size: str, color: str, amount: float) -> str:
+def msg_payment_confirmed(product: str, size: str, color: str, amount: float, delivery_fee: float = 0) -> str:
+    breakdown = (
+        f"Item: ₹{amount - delivery_fee:.0f}\n"
+        f"Delivery: ₹{delivery_fee:.0f}\n"
+        f"Total Paid: ₹{amount:.0f}\n\n"
+    ) if delivery_fee else f"Amount Paid: ₹{amount:.0f}\n\n"
     return (
         f"✅ Payment Verified! Order Confirmed 🎉\n\n"
         f"Order Details:\n"
         f"Product: {product}\n"
         f"Size: {size} | Color: {color}\n"
-        f"Amount Paid: ₹{amount:.0f}\n\n"
+        f"{breakdown}"
         f"We will notify you once shipped! 📦\n\n"
         f"Reply:\n"
         f"TRACK → Track your order 📦\n"
@@ -180,13 +190,18 @@ def msg_payment_confirmed(product: str, size: str, color: str, amount: float) ->
         f"HELP → Show all options"
     )
 
-def msg_cod_confirmed(product: str, size: str, color: str, amount: float) -> str:
+def msg_cod_confirmed(product: str, size: str, color: str, amount: float, delivery_fee: float = 0) -> str:
+    breakdown = (
+        f"Item: ₹{amount - delivery_fee:.0f}\n"
+        f"Delivery: ₹{delivery_fee:.0f}\n"
+        f"Total: ₹{amount:.0f} (pay on delivery)\n\n"
+    ) if delivery_fee else f"Amount: ₹{amount:.0f} (pay on delivery)\n\n"
     return (
         f"✅ Order Confirmed! (Cash on Delivery)\n\n"
         f"Order Details:\n"
         f"Product: {product}\n"
         f"Size: {size} | Color: {color}\n"
-        f"Amount: ₹{amount:.0f} (pay on delivery)\n\n"
+        f"{breakdown}"
         f"Expected delivery: 5-7 working days 🚚\n\n"
         f"Reply:\n"
         f"TRACK → Track your order 📦\n"
