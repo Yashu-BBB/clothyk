@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════
-// CLOTHYK — Shared JS (Premium Redesign)
+// clovical — Shared JS (Premium Redesign)
 // ═══════════════════════════════════════
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────
@@ -47,8 +47,8 @@ async function apiFetch(url, options = {}) {
 
 // ─── Cart ─────────────────────────────────────────────────────────────────
 const Cart = {
-  get() { return JSON.parse(localStorage.getItem("clothyk_cart") || "[]"); },
-  save(items) { localStorage.setItem("clothyk_cart", JSON.stringify(items)); updateCartBadge(); },
+  get() { return JSON.parse(localStorage.getItem("clovical_cart") || "[]"); },
+  save(items) { localStorage.setItem("clovical_cart", JSON.stringify(items)); updateCartBadge(); },
   add(product, size, color) {
     const items = this.get();
     const existing = items.find(i => i.id === product.id && i.size === size && i.color === color);
@@ -66,13 +66,13 @@ const Cart = {
   },
   count() { return this.get().reduce((s, i) => s + (i.qty || 1), 0); },
   total() { return this.get().reduce((s, i) => s + i.price * (i.qty || 1), 0); },
-  clear() { localStorage.removeItem("clothyk_cart"); updateCartBadge(); }
+  clear() { localStorage.removeItem("clovical_cart"); updateCartBadge(); }
 };
 
 // ─── Wishlist ─────────────────────────────────────────────────────────────
 const Wishlist = {
-  get() { return JSON.parse(localStorage.getItem("clothyk_wishlist") || "[]"); },
-  save(items) { localStorage.setItem("clothyk_wishlist", JSON.stringify(items)); updateWishlistBadge(); },
+  get() { return JSON.parse(localStorage.getItem("clovical_wishlist") || "[]"); },
+  save(items) { localStorage.setItem("clovical_wishlist", JSON.stringify(items)); updateWishlistBadge(); },
   toggle(product) {
     const items = this.get();
     const idx = items.findIndex(i => i.id === product.id);

@@ -90,7 +90,7 @@ def generate_details_page_pdf(order: dict, shopkeeper: dict) -> bytes:
         c.drawString(margin, y, text)
         y -= gap
 
-    line("CLOTHYK — PACKING SLIP", size=13, bold=True, gap=8 * mm)
+    line("clovical — PACKING SLIP", size=13, bold=True, gap=8 * mm)
     c.setStrokeColor(HexColor("#cccccc"))
     c.line(margin, y, width - margin, y)
     y -= 6 * mm

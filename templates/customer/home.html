@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clothyk — Premium Fashion</title>
+  <title>clovical — Premium Fashion</title>
   <meta name="description" content="Shop curated fashion for Boys & Girls. Premium styles from local boutiques delivered across India.">
   <link rel="stylesheet" href="/static/css/shared.css">
   <style>
@@ -412,7 +412,7 @@
 
   <!-- NAVBAR -->
   <nav class="navbar">
-    <a href="/" class="nav-logo">Clothyk</a>
+    <a href="/" class="nav-logo">clovical</a>
     <div class="nav-links">
       <a href="/">Home</a>
       <a href="/products?gender=Girls" class="girls-nav-link">Girls</a>
@@ -560,7 +560,7 @@
   <footer>
     <div class="footer-inner">
       <div>
-        <div class="footer-brand">Clothyk</div>
+        <div class="footer-brand">clovical</div>
         <p class="footer-tagline">Curated fashion from local boutiques across India</p>
         <div class="footer-links">
           <a href="/products?gender=Girls" class="girls-nav-link">Girls</a>
@@ -577,7 +577,7 @@
         </div>
       </div>
     </div>
-    <p class="footer-copy">© 2026 Clothyk. Made by Yashwanth.B.</p>
+    <p class="footer-copy">© 2026 clovical. Made by Yashwanth.B.</p>
   </footer>
 
   <div id="toast-container"></div>
@@ -589,14 +589,14 @@
 
     async function fetchPublicSettings() {
       // Check sessionStorage first (valid for browser session)
-      const cached = sessionStorage.getItem('clothyk_public_settings');
+      const cached = sessionStorage.getItem('clovical_public_settings');
       if (cached) {
         try { return JSON.parse(cached); } catch(e) {}
       }
       try {
         const res = await fetch('/api/admin/public-settings');
         const data = await res.json();
-        sessionStorage.setItem('clothyk_public_settings', JSON.stringify(data));
+        sessionStorage.setItem('clovical_public_settings', JSON.stringify(data));
         return data;
       } catch(e) {
         return { girls_section_enabled: 'false', delivery_fee: '0' };

@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════
--- CLOTHYK DATABASE SCHEMA
+-- clovical DATABASE SCHEMA
 -- Run in Supabase SQL Editor
 -- ═══════════════════════════════════════════════════
 
@@ -126,7 +126,7 @@ INSERT INTO admins (username, password)
 VALUES ('admin', '$2b$12$KIX0.GGqK4R2WPNiPdFJHO0sMQ8WnmEjRaJ.8jN5tPSaP.aA8bHRS')
 ON CONFLICT (username) DO NOTHING;
 -- ═══════════════════════════════════════════════════
--- CLOTHYK SCHEMA UPDATE — Categories + Gender
+-- clovical SCHEMA UPDATE — Categories + Gender
 -- Run in Supabase SQL Editor
 -- ═══════════════════════════════════════════════════
 

@@ -9,12 +9,12 @@ logger = logging.getLogger(__name__)
 
 WA_NUMBER = os.getenv("WHATSAPP_NUMBER", "")
 UPI_ID = os.getenv("UPI_ID", "")
-UPI_NAME = os.getenv("UPI_NAME", "Clothyk")
+UPI_NAME = os.getenv("UPI_NAME", "clovical")
 
 # ─── WPPConnect server config (replaces UltraMsg) ──────────────────────────
 WPP_SERVER_URL = os.getenv("WPP_SERVER_URL", "").rstrip("/")
 WPP_API_KEY = os.getenv("WPP_API_KEY", "")
-WPP_SESSION = os.getenv("WPP_SESSION", "clothyk")
+WPP_SESSION = os.getenv("WPP_SESSION", "clovical")
 
 
 def _headers() -> dict:

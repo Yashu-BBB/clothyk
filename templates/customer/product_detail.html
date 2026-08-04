@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title id="page-title">Product — Clothyk</title>
+  <title id="page-title">Product — clovical</title>
   <meta name="description" id="page-desc" content="">
   <meta property="og:title" id="og-title" content="">
   <meta property="og:description" id="og-desc" content="">
@@ -511,7 +511,7 @@
 <body>
 
   <nav class="navbar">
-    <a href="/" class="nav-logo">Clothyk</a>
+    <a href="/" class="nav-logo">clovical</a>
     <div class="nav-links">
       <a href="/">Home</a>
       <a href="/products" id="nav-shop-link">Shop</a>
@@ -680,7 +680,7 @@
   <footer>
     <div class="footer-inner">
       <div>
-        <div class="footer-brand">Clothyk</div>
+        <div class="footer-brand">clovical</div>
         <p class="footer-tagline">Curated fashion across India</p>
         <div class="footer-links">
           <a href="/products?gender=Girls" class="girls-nav-link">Girls</a>
@@ -689,7 +689,7 @@
         </div>
       </div>
     </div>
-    <p class="footer-copy">&copy; 2025 Clothyk. All rights reserved.</p>
+    <p class="footer-copy">&copy; 2025 clovical. All rights reserved.</p>
   </footer>
 
   <!-- Size Guide Modal -->
@@ -834,12 +834,12 @@
 
     // ─── PUBLIC SETTINGS (Girls visibility) ──────────────────────────────
     async function fetchPublicSettings() {
-      const cached = sessionStorage.getItem('clothyk_public_settings');
+      const cached = sessionStorage.getItem('clovical_public_settings');
       if (cached) { try { return JSON.parse(cached); } catch(e) {} }
       try {
         const res = await fetch('/api/admin/public-settings');
         const data = await res.json();
-        sessionStorage.setItem('clothyk_public_settings', JSON.stringify(data));
+        sessionStorage.setItem('clovical_public_settings', JSON.stringify(data));
         return data;
       } catch(e) {
         return { girls_section_enabled: 'false' };
@@ -862,7 +862,7 @@
       try {
         product = await apiFetch(`/api/products/${productId}`);
 
-        document.getElementById("page-title").textContent = `${product.name} — Clothyk`;
+        document.getElementById("page-title").textContent = `${product.name} — clovical`;
         document.getElementById("page-desc").content = product.description || product.name;
         document.getElementById("og-title").content = product.name;
         document.getElementById("og-desc").content = product.description || "";

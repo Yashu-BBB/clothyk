@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Shop — Clothyk</title>
+  <title>Shop — clovical</title>
   <link rel="stylesheet" href="/static/css/shared.css">
   <style>
     .shop-header {
@@ -417,7 +417,7 @@
 <body>
 
   <nav class="navbar">
-    <a href="/" class="nav-logo">Clothyk</a>
+    <a href="/" class="nav-logo">clovical</a>
     <div class="nav-links">
       <a href="/">Home</a>
       <a href="/products?gender=Girls" class="girls-nav-link">Girls</a>
@@ -449,7 +449,7 @@
   <!-- Page Header -->
   <div class="shop-header">
     <div class="shop-header-inner">
-      <div class="shop-eyebrow">Clothyk Store</div>
+      <div class="shop-eyebrow">clovical Store</div>
       <h1 class="shop-title" id="page-title">All Collections</h1>
     </div>
   </div>
@@ -548,7 +548,7 @@
   <footer>
     <div class="footer-inner">
       <div>
-        <div class="footer-brand">Clothyk</div>
+        <div class="footer-brand">clovical</div>
         <p class="footer-tagline">Curated fashion across India</p>
         <div class="footer-links">
           <a href="/products?gender=Girls">Girls</a>
@@ -558,7 +558,7 @@
         </div>
       </div>
     </div>
-    <p class="footer-copy">© 2025 Clothyk. All rights reserved.</p>
+    <p class="footer-copy">© 2025 clovical. All rights reserved.</p>
   </footer>
 
   <!-- Mobile bottom sheet -->
@@ -708,12 +708,12 @@
     }
 
     async function fetchPublicSettings() {
-      const cached = sessionStorage.getItem('clothyk_public_settings');
+      const cached = sessionStorage.getItem('clovical_public_settings');
       if (cached) { try { return JSON.parse(cached); } catch(e) {} }
       try {
         const res = await fetch('/api/admin/public-settings');
         const data = await res.json();
-        sessionStorage.setItem('clothyk_public_settings', JSON.stringify(data));
+        sessionStorage.setItem('clovical_public_settings', JSON.stringify(data));
         return data;
       } catch(e) {
         return { girls_section_enabled: 'false' };

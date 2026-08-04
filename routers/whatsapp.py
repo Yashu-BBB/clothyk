@@ -73,7 +73,7 @@ async def whatsapp_webhook(request: Request):
     Expected payload shape:
     {
       "event": "onmessage",
-      "session": "clothyk",
+      "session": "clovical",
       "data": {
         "id": "message_id",
         "from": "917975735906@c.us",

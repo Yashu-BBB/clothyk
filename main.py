@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
     yield
     await close_redis()
 
-app = FastAPI(title="Clothyk", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title="clovical", lifespan=lifespan, docs_url=None, redoc_url=None)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -73,7 +73,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 ALLOWED_ORIGINS = [
-    "https://clothyk.up.railway.app",
+    "https://clovical.up.railway.app",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
 ]

@@ -1,5 +1,5 @@
 """
-NimbusPost courier integration for Clothyk.
+NimbusPost courier integration for clovical.
 
 Handles pickup-address registration, shipment creation, tracking, and
 cancellation via the NimbusPost API (https://api.nimbuspost.com/v1).
@@ -102,9 +102,9 @@ def register_pickup_address(shopkeeper: dict) -> str | None:
         return None
 
     payload = {
-        "warehouse_name": f"Clothyk - {shopkeeper.get('shop_name', '')}",
+        "warehouse_name": f"clovical - {shopkeeper.get('shop_name', '')}",
         "name": shopkeeper.get("shopkeeper_name", ""),
-        "email": "clothyk@gmail.com",
+        "email": "clovical@gmail.com",
         "phone": shopkeeper.get("contact", ""),
         "address": shopkeeper.get("address", ""),
         "pincode": shopkeeper.get("pincode", ""),
@@ -175,7 +175,7 @@ def create_shipment(order: dict, shopkeeper: dict) -> dict | None:
             "phone": order.get("customer_phone", ""),
         },
         "pickup": {
-            "warehouse_name": f"Clothyk - {shopkeeper.get('shop_name', '')}",
+            "warehouse_name": f"clovical - {shopkeeper.get('shop_name', '')}",
             "name": shopkeeper.get("shopkeeper_name", ""),
             "address": shopkeeper.get("address", ""),
             "pincode": shopkeeper.get("pincode", ""),
