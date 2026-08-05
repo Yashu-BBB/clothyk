@@ -5,8 +5,9 @@ Handles pickup-address registration, shipment creation, tracking, and
 cancellation via the NimbusPost API (https://api.nimbuspost.com/v1).
 
 NimbusPost uses email+password login to obtain a JWT token, which is then
-sent as the `token` header on every subsequent call. The token is cached
-in-process and refreshed automatically ~1 hour before its 24h expiry.
+sent as `Authorization: Bearer {token}` on every subsequent call. The token
+is cached in-process and refreshed automatically ~1 hour before its 24h
+expiry.
 
 Every function degrades gracefully (returns None / False) when
 NIMBUSPOST_API_KEY / credentials are not yet configured, or when the API
@@ -67,7 +68,11 @@ def get_auth_token() -> str | None:
         )
         resp.raise_for_status()
         data = resp.json()
-        token = data.get("data")
+        # NimbusPost's exact field name for the token isn't confirmed from the
+        # public docs, so check the common possibilities defensively.
+        token = data.get("data") or data.get("token") or (
+            data.get("data", {}).get("token") if isinstance(data.get("data"), dict) else None
+        )
         if not token:
             logger.error(f"NimbusPost login returned no token: {data}", exc_info=True)
             return None
@@ -85,7 +90,7 @@ def _headers() -> dict | None:
     token = get_auth_token()
     if not token:
         return None
-    return {"Content-Type": "application/json", "token": token}
+    return {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
 
 
 def register_pickup_address(shopkeeper: dict) -> str | None:

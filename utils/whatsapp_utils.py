@@ -45,7 +45,7 @@ def _to_wpp_number(to: str) -> str:
     return digits
 
 
-def _post(endpoint: str, payload: dict, timeout: int = 15) -> bool:
+def _post(endpoint: str, payload: dict, timeout: int = 45) -> bool:
     try:
         r = requests.post(
             f"{WPP_SERVER_URL}/{endpoint}",
