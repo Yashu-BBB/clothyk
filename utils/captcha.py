@@ -6,11 +6,24 @@ logger = logging.getLogger(__name__)
 
 TURNSTILE_SECRET = os.getenv("CLOUDFLARE_TURNSTILE_SECRET", "")
 
+if not TURNSTILE_SECRET:
+    logger.critical(
+        "⚠️ SECURITY WARNING: CLOUDFLARE_TURNSTILE_SECRET is not set! "
+        "Captcha verification is DISABLED and all orders will bypass it. "
+        "Set CLOUDFLARE_TURNSTILE_SECRET in your environment variables immediately "
+        "if this is a production environment."
+    )
+
 
 def verify_turnstile(token: str, ip: str = "") -> bool:
-    if not TURNSTILE_SECRET or not token:
-        logger.warning("Turnstile secret or token missing — skipping in dev mode")
-        return True  # allow in dev/test if not configured
+    if not TURNSTILE_SECRET:
+        # Secret not configured at all — dev/test bypass. Already logged
+        # loudly at import time above so misconfiguration in production
+        # can't go unnoticed.
+        return True
+    if not token:
+        logger.warning(f"Captcha token missing from request, IP: {ip}")
+        return False
     try:
         r = requests.post(
             "https://challenges.cloudflare.com/turnstile/v0/siteverify",

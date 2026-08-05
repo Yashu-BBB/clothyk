@@ -87,10 +87,12 @@ async def whatsapp_webhook(request: Request):
       }
     }
     """
-    # Optional shared-secret check (WPPConnect server can send this as a header)
+    # Shared-secret check (WPPConnect server sends this as a header). When
+    # WPP_API_KEY is configured, the header is required — an attacker
+    # omitting it entirely must not be able to skip verification.
     if WPP_API_KEY:
         incoming_key = request.headers.get("x-api-key", "")
-        if incoming_key and incoming_key != WPP_API_KEY:
+        if incoming_key != WPP_API_KEY:
             raise HTTPException(status_code=401, detail="Invalid API key")
 
     try:

@@ -1,19 +1,22 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Request, HTTPException, Depends
+from pydantic import BaseModel, Field
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from utils.db import supabase_admin
 from utils.auth_utils import require_admin
 from utils.cache import two_layer_get, two_layer_set, two_layer_clear_pattern
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 class CategoryCreate(BaseModel):
-    name: str
-    icon: str = "🏷️"
-    gender: str
-    sort_order: int = 0
+    name: str = Field(..., max_length=100)
+    icon: str = Field("🏷️", max_length=10)
+    gender: str = Field(..., max_length=10)
+    sort_order: int = Field(0, ge=0, le=1000)
 
 
 class CategoryUpdate(BaseModel):
@@ -26,7 +29,8 @@ class CategoryUpdate(BaseModel):
 # ─── PUBLIC ───────────────────────────────────────────────────────────────
 
 @router.get("/")
-async def list_categories(gender: str | None = None):
+@limiter.limit("60/minute")
+async def list_categories(request: Request, gender: str | None = None):
     cache_key = f"categories:all:{gender}"
     try:
         cached = await two_layer_get(cache_key)
@@ -45,7 +49,8 @@ async def list_categories(gender: str | None = None):
 
 
 @router.get("/boys")
-async def boys_categories():
+@limiter.limit("60/minute")
+async def boys_categories(request: Request):
     cache_key = "categories:boys"
     try:
         cached = await two_layer_get(cache_key)
@@ -61,7 +66,8 @@ async def boys_categories():
 
 
 @router.get("/girls")
-async def girls_categories():
+@limiter.limit("60/minute")
+async def girls_categories(request: Request):
     cache_key = "categories:girls"
     try:
         cached = await two_layer_get(cache_key)

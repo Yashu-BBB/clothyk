@@ -11,6 +11,12 @@ logger = logging.getLogger(__name__)
 SECRET_KEY = os.getenv("SECRET_KEY", "changeme-in-production")
 SESSION_TTL = 3600 * 4  # 4 hours
 
+if SECRET_KEY == "changeme-in-production":
+    logger.critical(
+        "⚠️ SECURITY WARNING: SECRET_KEY is using default value! "
+        "Set a strong SECRET_KEY in your environment variables immediately!"
+    )
+
 def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 

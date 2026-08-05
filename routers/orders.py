@@ -1,7 +1,8 @@
+import re
 import logging
 import requests
 from fastapi import APIRouter, Request, HTTPException, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from utils.db import supabase_admin
@@ -20,15 +21,15 @@ WA_NUMBER = __import__("os").getenv("WHATSAPP_NUMBER", "")
 
 
 class OrderRequest(BaseModel):
-    customer_name: str
-    customer_phone: str
-    customer_address: str
-    customer_city: str
-    customer_pincode: str
-    product_id: str
-    size: str
-    color: str
-    captcha_token: str
+    customer_name: str = Field(..., max_length=200)
+    customer_phone: str = Field(..., max_length=10, min_length=10)
+    customer_address: str = Field(..., max_length=500)
+    customer_city: str = Field(..., max_length=100)
+    customer_pincode: str = Field(..., max_length=6, min_length=6)
+    product_id: str = Field(..., max_length=36)
+    size: str = Field(..., max_length=50)
+    color: str = Field(..., max_length=100)
+    captcha_token: str = Field(..., max_length=2000)
 
 
 class StatusUpdate(BaseModel):
@@ -181,6 +182,22 @@ async def create_order(order: OrderRequest, request: Request):
     if not verify_turnstile(order.captcha_token, client_ip):
         raise HTTPException(status_code=400, detail="Captcha verification failed")
 
+    # Phone number validation (frontend validation can be bypassed)
+    phone = order.customer_phone.strip().replace(" ", "").replace("-", "")
+    if not re.match(r'^\d{10}$', phone):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid phone number. Must be 10 digits."
+        )
+    order.customer_phone = phone  # use cleaned version
+
+    # Pincode validation (frontend validation can be bypassed)
+    if not re.match(r'^[1-9][0-9]{5}$', order.customer_pincode):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid pincode. Must be a valid 6-digit Indian pincode."
+        )
+
     # Fetch product (including hidden price)
     try:
         prod_res = supabase_admin.table("products").select("*").eq("id", order.product_id).single().execute()
@@ -238,11 +255,27 @@ async def create_order(order: OrderRequest, request: Request):
         logger.error(f"Order save failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to create order")
 
-    # Decrement stock (product is unique, set stock to 0)
+    # Decrement stock atomically — only succeeds if stock hasn't changed
+    # since we read it above. If it has (a concurrent order beat us to it),
+    # roll back the order we just created instead of allowing stock to go negative.
     try:
-        supabase_admin.table("products").update({"stock": prod["stock"] - 1}).eq("id", order.product_id).execute()
+        stock_result = supabase_admin.table("products")\
+            .update({"stock": prod["stock"] - 1})\
+            .eq("id", order.product_id)\
+            .eq("stock", prod["stock"])\
+            .execute()
+
+        if not stock_result.data:
+            supabase_admin.table("orders").delete().eq("id", new_order["id"]).execute()
+            logger.warning(f"Stock race condition detected for {order.product_id} — order {new_order['id']} rolled back")
+            raise HTTPException(
+                status_code=409,
+                detail="Product just went out of stock. Please try again."
+            )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.warning(f"Stock update failed for {order.product_id}: {e}")
+        logger.warning(f"Stock update failed for {order.product_id}: {e}", exc_info=True)
 
     total_amount = prod["our_price"] + delivery_fee
     price_lines = (

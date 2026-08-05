@@ -2,6 +2,8 @@ import logging
 from fastapi import APIRouter, Request, Depends, HTTPException, UploadFile, File, Form, Query
 from pydantic import BaseModel
 from typing import Optional, List
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 import json
 import uuid
 
@@ -14,14 +16,20 @@ from utils.auth_utils import require_admin
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 SAFE_FIELDS = "id,name,description,our_price,mrp,sizes,colors,image,images,category,gender,featured,stock,shopkeeper_code,view_count,created_at,size_chart"
+
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB per image
+MAX_TOTAL_IMAGES = 6
 
 
 # ─── PUBLIC ENDPOINTS ─────────────────────────────────────────────────────
 
 @router.get("/")
+@limiter.limit("60/minute")
 async def list_products(
+    request: Request,
     category: Optional[str] = None,
     search: Optional[str] = None,      # searches name, color, size, category, shopkeeper code
     sort: Optional[str] = None,
@@ -97,7 +105,8 @@ async def list_products(
 
 
 @router.get("/filter-options")
-async def get_filter_options(gender: Optional[str] = None):
+@limiter.limit("30/minute")
+async def get_filter_options(request: Request, gender: Optional[str] = None):
     cache_key = f"products:filter-options:{gender}"
     cached = await two_layer_get(cache_key)
     if cached:
@@ -165,7 +174,8 @@ async def list_categories():
 
 
 @router.get("/{product_id}")
-async def get_product(product_id: str):
+@limiter.limit("60/minute")
+async def get_product(request: Request, product_id: str):
     cache_key = f"product:{product_id}"
     try:
         cached = await two_layer_get(cache_key)
@@ -235,13 +245,13 @@ async def admin_list_products(admin=Depends(require_admin)):
 
 @router.post("/admin/add")
 async def add_product(
-    name: str = Form(...),
-    description: str = Form(""),
+    name: str = Form(..., max_length=200),
+    description: str = Form("", max_length=2000),
     our_price: float = Form(...),
     shopkeeper_price: float = Form(...),
     sizes: str = Form("[]"),
     colors: str = Form("[]"),
-    category: str = Form(""),
+    category: str = Form("", max_length=100),
     gender: str = Form("Girls"),
     featured: bool = Form(False),
     stock: int = Form(1),
@@ -261,8 +271,18 @@ async def add_product(
         # Upload each image (max 6) to Supabase storage
         image_urls = []
         valid_images = [img for img in images if img and img.filename]
-        for img in valid_images[:6]:
+        if len(valid_images) > MAX_TOTAL_IMAGES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Maximum {MAX_TOTAL_IMAGES} images allowed per product."
+            )
+        for img in valid_images[:MAX_TOTAL_IMAGES]:
             contents = await img.read()
+            if len(contents) > MAX_IMAGE_SIZE:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Image '{img.filename}' exceeds 5MB limit. Please compress and try again."
+                )
             ext = img.filename.rsplit(".", 1)[-1].lower()
             fname = f"{uuid.uuid4()}.{ext}"
             supabase_admin.storage.from_("product-images").upload(
@@ -316,13 +336,13 @@ async def add_product(
 @router.put("/admin/{product_id}")
 async def edit_product(
     product_id: str,
-    name: str = Form(None),
-    description: str = Form(None),
+    name: str = Form(None, max_length=200),
+    description: str = Form(None, max_length=2000),
     our_price: float = Form(None),
     shopkeeper_price: float = Form(None),
     sizes: str = Form(None),
     colors: str = Form(None),
-    category: str = Form(None),
+    category: str = Form(None, max_length=100),
     gender: str = Form(None),
     featured: bool = Form(None),
     stock: int = Form(None),
@@ -370,9 +390,19 @@ async def edit_product(
         # Upload new images
         new_urls = []
         valid_new = [img for img in new_images if img and img.filename]
-        slots_remaining = max(0, 6 - len(existing_urls))
+        if len(existing_urls) + len(valid_new) > MAX_TOTAL_IMAGES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Maximum {MAX_TOTAL_IMAGES} images allowed per product."
+            )
+        slots_remaining = max(0, MAX_TOTAL_IMAGES - len(existing_urls))
         for img in valid_new[:slots_remaining]:
             contents = await img.read()
+            if len(contents) > MAX_IMAGE_SIZE:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Image '{img.filename}' exceeds 5MB limit. Please compress and try again."
+                )
             ext = img.filename.rsplit(".", 1)[-1].lower()
             fname = f"{uuid.uuid4()}.{ext}"
             supabase_admin.storage.from_("product-images").upload(
@@ -400,6 +430,8 @@ async def edit_product(
         mem_clear_pattern("product:")
         logger.info(f"Product edited: {product_id} by admin {admin['sub']}")
         return res.data[0] if res.data else {}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to edit product: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to edit product: {str(e)}")

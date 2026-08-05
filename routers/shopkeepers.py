@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from utils.db import supabase_admin
 from utils.auth_utils import require_admin
 from utils.nimbuspost import register_pickup_address
@@ -11,13 +11,13 @@ router = APIRouter()
 
 
 class ShopkeeperCreate(BaseModel):
-    shop_name: str
-    shopkeeper_name: str
-    contact: str
-    address: str | None = None
-    pincode: str | None = None
-    city: str | None = None
-    state: str | None = None
+    shop_name: str = Field(..., max_length=200)
+    shopkeeper_name: str = Field(..., max_length=200)
+    contact: str = Field(..., max_length=15)
+    address: str | None = Field(None, max_length=500)
+    pincode: str | None = Field(None, max_length=6, min_length=6)
+    city: str | None = Field(None, max_length=100)
+    state: str | None = Field(None, max_length=100)
 
 
 class ShopkeeperUpdate(BaseModel):

@@ -36,6 +36,9 @@ if SENTRY_DSN:
 # ─── Rate Limiter ──────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
 
+# ─── Visitor IP hash salt (prevents SHA256 rainbow-table lookups on ip_hash) ─
+HASH_SALT = os.getenv("SECRET_KEY", "salt")[:16]
+
 # ─── Blocked IPs (in-memory, reset on restart) ────────────────────────────
 blocked_ips: dict[str, float] = {}
 failed_attempts: dict[str, int] = {}
@@ -72,6 +75,38 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error. We are looking into it."}
     )
 
+
+@app.get("/health")
+async def health_check():
+    """Lightweight health check for UptimeRobot and monitoring."""
+    status = {
+        "app": "ok",
+        "redis": "unknown",
+        "db": "unknown"
+    }
+    # Check Redis
+    try:
+        from utils.cache import redis_client
+        if redis_client:
+            await redis_client.ping()
+            status["redis"] = "ok"
+        else:
+            status["redis"] = "disabled"
+    except Exception as e:
+        status["redis"] = f"error: {str(e)}"
+        logger.warning(f"Redis health check failed: {e}")
+
+    # Check Supabase DB
+    try:
+        supabase_admin.table("admins").select("id").limit(1).execute()
+        status["db"] = "ok"
+    except Exception as e:
+        status["db"] = f"error: {str(e)}"
+        logger.error(f"DB health check failed: {e}", exc_info=True)
+
+    # Return 200 if app is running even if Redis/DB have issues
+    return status
+
 ALLOWED_ORIGINS = [
     "https://clovical.up.railway.app",
     "http://localhost:8000",
@@ -90,7 +125,7 @@ app.add_middleware(
 @app.middleware("http")
 async def track_and_protect(request: Request, call_next):
     client_ip = request.headers.get("CF-Connecting-IP") or get_remote_address(request)
-    ip_hash = hashlib.sha256(client_ip.encode()).hexdigest()
+    ip_hash = hashlib.sha256(f"{HASH_SALT}{client_ip}".encode()).hexdigest()
 
     # Block IPs
     if client_ip in blocked_ips:

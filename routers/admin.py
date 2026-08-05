@@ -3,6 +3,8 @@ from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from utils.db import supabase_admin
 from utils.auth_utils import get_admin_from_request, require_admin, hash_password
 from utils.nimbuspost import track_shipment, cancel_shipment, get_couriers
@@ -15,6 +17,7 @@ from utils import cache as cache_utils
 logger = logging.getLogger(__name__)
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
+limiter = Limiter(key_func=get_remote_address)
 
 
 def admin_or_redirect(request: Request):
@@ -25,7 +28,8 @@ def admin_or_redirect(request: Request):
 
 
 @router.get("/dashboard-data")
-async def dashboard_data(admin=Depends(require_admin)):
+@limiter.limit("30/minute")
+async def dashboard_data(request: Request, admin=Depends(require_admin)):
     cache_key = "admin:dashboard"
     try:
         cached = await cache_get(cache_key)
@@ -79,7 +83,8 @@ async def dashboard_data(admin=Depends(require_admin)):
 
 
 @router.get("/cache-stats")
-async def cache_stats(admin=Depends(require_admin)):
+@limiter.limit("10/minute")
+async def cache_stats(request: Request, admin=Depends(require_admin)):
     """Shows current cache status for admin monitoring."""
     import time
     active_mem_keys = [
