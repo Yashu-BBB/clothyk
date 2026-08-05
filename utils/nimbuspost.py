@@ -4,15 +4,29 @@ NimbusPost courier integration for clovical.
 Handles pickup-address registration, shipment creation, tracking, and
 cancellation via the NimbusPost API (https://api.nimbuspost.com/v1).
 
-NimbusPost uses email+password login to obtain a JWT token, which is then
-sent as `Authorization: Bearer {token}` on every subsequent call. The token
-is cached in-process and refreshed automatically ~1 hour before its 24h
-expiry.
+IMPORTANT — NimbusPost actually has TWO separate auth systems for
+different endpoint groups (confirmed from their own public docs):
 
-Every function degrades gracefully (returns None / False) when
-NIMBUSPOST_API_KEY / credentials are not yet configured, or when the API
-call fails for any reason — NimbusPost is never allowed to block the core
-order flow. All failures are logged and reported to Sentry if configured.
+  1. Static key system ("Old API" in the NimbusPost dashboard, under
+     Settings → API → "Reset API Key"). Sent as header:
+         NP-API-KEY: {NIMBUSPOST_API_KEY}
+     This covers Orders and Warehouse (pickup address) endpoints.
+
+  2. Email+password login system ("New API" in the dashboard, under
+     Settings → API → "Generate Api User Credentials"). You log in once
+     via /users/login to get a JWT, then send it as:
+         Authorization: Bearer {token}
+     This covers Couriers, Shipment create/cancel, Tracking, NDR, Manifest.
+
+So this module uses BOTH: register_pickup_address() uses the static
+NP-API-KEY header, everything else uses the Bearer token. Both
+NIMBUSPOST_API_KEY and NIMBUSPOST_EMAIL/PASSWORD should be set for full
+functionality.
+
+Every function degrades gracefully (returns None / False) when the
+relevant credentials aren't configured, or when the API call fails for
+any reason — NimbusPost is never allowed to block the core order flow.
+All failures are logged and reported to Sentry if configured.
 """
 
 import os
@@ -36,24 +50,31 @@ _token_cache: dict = {"token": None, "fetched_at": 0}
 _TOKEN_TTL_SECONDS = 23 * 3600  # refresh a bit before the real 24h expiry
 
 
+def _bearer_configured() -> bool:
+    """Shipment/tracking/courier endpoints need email+password login."""
+    return bool(NIMBUSPOST_EMAIL and NIMBUSPOST_PASSWORD)
+
+
+def _static_configured() -> bool:
+    """Pickup address / warehouse endpoints need the static NP-API-KEY."""
+    return bool(NIMBUSPOST_API_KEY)
+
+
 def _is_configured() -> bool:
-    """NimbusPost needs either a static API key OR email+password login."""
-    return bool(NIMBUSPOST_API_KEY or (NIMBUSPOST_EMAIL and NIMBUSPOST_PASSWORD))
+    """True if either auth method is set up (used for generic status checks)."""
+    return _bearer_configured() or _static_configured()
 
 
 def get_auth_token() -> str | None:
     """
-    Returns a valid NimbusPost auth token, fetching/refreshing as needed.
-
-    If NIMBUSPOST_API_KEY is set directly, it's used as-is (some NimbusPost
-    accounts issue a static token). Otherwise falls back to email+password
-    login against /users/login to obtain a JWT, cached until near-expiry.
+    Returns a valid NimbusPost Bearer token for shipment/tracking/courier
+    endpoints, fetching/refreshing via email+password login as needed.
+    (This is separate from NIMBUSPOST_API_KEY, which is a different static
+    key used only for pickup address / warehouse endpoints — see
+    _static_headers().)
     """
-    if NIMBUSPOST_API_KEY:
-        return NIMBUSPOST_API_KEY
-
-    if not (NIMBUSPOST_EMAIL and NIMBUSPOST_PASSWORD):
-        logger.warning("NimbusPost not configured (no API key or email/password)")
+    if not _bearer_configured():
+        logger.warning("NimbusPost Bearer auth not configured (no email/password)")
         return None
 
     now = time.time()
@@ -86,23 +107,65 @@ def get_auth_token() -> str | None:
         return None
 
 
-def _headers() -> dict | None:
+def _bearer_headers() -> dict | None:
     token = get_auth_token()
     if not token:
         return None
     return {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
 
 
+def _static_headers() -> dict | None:
+    if not _static_configured():
+        logger.warning("NimbusPost static API key (NIMBUSPOST_API_KEY) not configured")
+        return None
+    return {"Content-Type": "application/json", "NP-API-KEY": NIMBUSPOST_API_KEY}
+
+
+def get_couriers() -> dict:
+    """
+    Diagnostic helper: calls NimbusPost's courier-list endpoint using the
+    Bearer token to confirm auth is working end-to-end, independent of the
+    pickup-address/warehouse call. Tries the two most likely path variants
+    since the exact path isn't confirmed from public docs, and returns
+    full diagnostic info either way (not just success/failure) so it's
+    useful for debugging regardless of which path is correct.
+    """
+    headers = _bearer_headers()
+    if not headers:
+        return {"ok": False, "error": "Bearer auth not configured or login failed"}
+
+    for path in ("/courier", "/couriers"):
+        try:
+            resp = requests.get(f"{NIMBUSPOST_BASE_URL}{path}", headers=headers, timeout=_REQUEST_TIMEOUT)
+            if resp.status_code == 200:
+                return {"ok": True, "path_used": path, "status_code": 200, "body": resp.json()}
+            last_result = {"ok": False, "path_tried": path, "status_code": resp.status_code, "body": resp.text[:500]}
+        except Exception as e:
+            last_result = {"ok": False, "path_tried": path, "error": str(e)}
+    return last_result
+
+
 def register_pickup_address(shopkeeper: dict) -> str | None:
     """
-    Registers a shopkeeper's address as a NimbusPost pickup location.
-    Returns the pickup_id on success, or None on failure / not configured.
+    Registers a shopkeeper's address as a NimbusPost pickup location
+    (NimbusPost calls this a "warehouse"). Returns the pickup_id on
+    success, or None on failure / not configured.
+
+    Uses the static NP-API-KEY auth system (NIMBUSPOST_API_KEY), NOT the
+    Bearer token — this endpoint lives under NimbusPost's "Old API"
+    (Settings → API → Reset API Key in their dashboard), separate from
+    the shipment/tracking endpoints below.
+
+    Note: the exact endpoint path below is our best-supported guess from
+    the original integration spec; NimbusPost's rendered API docs (behind
+    JS) couldn't be fully verified. If this 404s (vs 403), the path
+    itself may need adjusting — check NimbusPost's Old API doc directly.
     """
-    if not _is_configured():
-        logger.warning("NimbusPost not configured — skipping pickup address registration")
+    if not _static_configured():
+        logger.warning("NimbusPost static API key not configured — skipping pickup address registration")
         return None
 
-    headers = _headers()
+    headers = _static_headers()
     if not headers:
         return None
 
@@ -132,6 +195,18 @@ def register_pickup_address(shopkeeper: dict) -> str | None:
             return None
         logger.info(f"NimbusPost pickup address registered: {shopkeeper.get('shop_name')} -> {pickup_id}")
         return pickup_id
+    except requests.exceptions.HTTPError as e:
+        if e.response is not None and e.response.status_code == 403:
+            logger.error(
+                f"NimbusPost pickup address registration got 403 Forbidden for {shopkeeper.get('shop_name')} "
+                f"— this usually means the NimbusPost account isn't yet activated for API warehouse "
+                f"registration, or needs a wallet top-up. Contact tech@nimbuspost.com if this persists.",
+                exc_info=True,
+            )
+        else:
+            logger.error(f"NimbusPost pickup address registration failed for {shopkeeper.get('shop_name')}: {e}", exc_info=True)
+        sentry_sdk.capture_exception(e)
+        return None
     except Exception as e:
         logger.error(f"NimbusPost pickup address registration failed for {shopkeeper.get('shop_name')}: {e}", exc_info=True)
         sentry_sdk.capture_exception(e)
@@ -152,11 +227,11 @@ def create_shipment(order: dict, shopkeeper: dict) -> dict | None:
     Returns {"awb": ..., "courier_name": ..., "label_url": ..., "shipment_id": ...}
     on success, or None on failure / not configured.
     """
-    if not _is_configured():
-        logger.warning("NimbusPost not configured — cannot create shipment")
+    if not _bearer_configured():
+        logger.warning("NimbusPost Bearer auth not configured — cannot create shipment")
         return None
 
-    headers = _headers()
+    headers = _bearer_headers()
     if not headers:
         return None
 
@@ -198,7 +273,7 @@ def create_shipment(order: dict, shopkeeper: dict) -> dict | None:
 
     try:
         resp = requests.post(
-            f"{NIMBUSPOST_BASE_URL}/shipment",
+            f"{NIMBUSPOST_BASE_URL}/shipments",
             json=payload,
             headers=headers,
             timeout=_REQUEST_TIMEOUT,
@@ -227,16 +302,16 @@ def create_shipment(order: dict, shopkeeper: dict) -> dict | None:
 
 def track_shipment(awb: str) -> dict | None:
     """Returns {"status": ..., "location": ..., "timestamp": ...} or None."""
-    if not _is_configured():
+    if not _bearer_configured():
         return None
 
-    headers = _headers()
+    headers = _bearer_headers()
     if not headers:
         return None
 
     try:
         resp = requests.get(
-            f"{NIMBUSPOST_BASE_URL}/shipment/track/{awb}",
+            f"{NIMBUSPOST_BASE_URL}/shipments/track/{awb}",
             headers=headers,
             timeout=_REQUEST_TIMEOUT,
         )
@@ -258,16 +333,16 @@ def track_shipment(awb: str) -> dict | None:
 
 def cancel_shipment(awb: str) -> bool:
     """Cancels a shipment on NimbusPost. Returns True on success."""
-    if not _is_configured():
+    if not _bearer_configured():
         return False
 
-    headers = _headers()
+    headers = _bearer_headers()
     if not headers:
         return False
 
     try:
         resp = requests.post(
-            f"{NIMBUSPOST_BASE_URL}/shipment/cancel",
+            f"{NIMBUSPOST_BASE_URL}/shipments/cancel",
             json={"awbs": [awb]},
             headers=headers,
             timeout=_REQUEST_TIMEOUT,

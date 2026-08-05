@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from utils.db import supabase_admin
 from utils.auth_utils import get_admin_from_request, require_admin, hash_password
-from utils.nimbuspost import track_shipment, cancel_shipment
+from utils.nimbuspost import track_shipment, cancel_shipment, get_couriers
 from utils.cache import (
     cache_get, cache_set, cache_delete, two_layer_get, two_layer_set,
     two_layer_clear_pattern, mem_delete,
@@ -205,6 +205,20 @@ async def track_order_shipment(order_id: str, admin=Depends(require_admin)):
     except Exception as e:
         logger.error(f"Tracking fetch failed for order {order_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch tracking info")
+
+
+@router.get("/nimbuspost/test-connection")
+async def test_nimbuspost_connection(admin=Depends(require_admin)):
+    """
+    Diagnostic endpoint: confirms the Bearer auth (email+password login)
+    works end-to-end by hitting the courier-list endpoint. Separate from
+    pickup address registration, which uses different (static-key) auth
+    — use this to isolate whether an issue is auth-wide or specific to
+    the warehouse/pickup-address call.
+    """
+    result = get_couriers()
+    logger.info(f"NimbusPost connection test by admin {admin['sub']}: {result}")
+    return result
 
 
 # ─── Settings (manual/auto shipment mode) ──────────────────────────────────

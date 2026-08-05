@@ -63,6 +63,15 @@
         </label>
       </div>
 
+      <!-- NimbusPost connection test -->
+      <div class="stat-card" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-weight:700">NimbusPost Connection Test</div>
+          <div style="color:var(--muted);font-size:0.85rem" id="nimbuspost-test-result">Checks if email/password login works (used for shipment creation, tracking, cancel). Pickup address registration uses a separate static key, so a passing test here doesn't guarantee that also works.</div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="testNimbuspostConnection()" id="nimbuspost-test-btn">Test Connection</button>
+      </div>
+
       <!-- Delivery fee setting -->
       <div class="stat-card" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
         <div>
@@ -240,6 +249,29 @@ async function toggleAutoShip() {
     showToast("Failed to update setting", "error");
     document.getElementById("auto-ship-toggle").checked = !enabled;
   }
+}
+
+async function testNimbuspostConnection() {
+  const btn = document.getElementById("nimbuspost-test-btn");
+  const resultEl = document.getElementById("nimbuspost-test-result");
+  btn.disabled = true;
+  btn.textContent = "Testing...";
+  resultEl.textContent = "Checking...";
+  try {
+    const result = await apiFetch("/api/admin/nimbuspost/test-connection");
+    if (result.ok) {
+      resultEl.innerHTML = `✅ Connection works! (endpoint: ${result.path_used})`;
+      showToast("NimbusPost Bearer auth is working ✅");
+    } else {
+      resultEl.innerHTML = `⚠️ ${result.error || `Status ${result.status_code}: ${JSON.stringify(result.body || '')}`}`;
+      showToast("NimbusPost connection test failed — see details below the button", "warning");
+    }
+  } catch(e) {
+    resultEl.textContent = "⚠️ Test request itself failed — check server logs";
+    showToast("Failed to run connection test", "error");
+  }
+  btn.disabled = false;
+  btn.textContent = "Test Connection";
 }
 
 async function loadDeliveryFee() {
