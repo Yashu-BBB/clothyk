@@ -1,4 +1,5 @@
 import re
+import asyncio
 import logging
 import requests
 from fastapi import APIRouter, Request, HTTPException, Depends
@@ -128,6 +129,29 @@ async def _send_shopkeeper_package_pdf(order: dict, shopkeeper: dict, nimbuspost
         await _mark_package_pdf_status(order_id, "failed")
 
 
+def _fire_and_forget(coro, description: str):
+    """
+    Schedules `coro` to run without the caller waiting on it. Used for the
+    shopkeeper package-PDF send, which can take 20+ seconds when WPPConnect
+    is unreachable or retrying — previously this was awaited inline, which
+    made the admin's /ship request (and NimbusPost's own failure path) hang
+    for that whole duration and often return a 502 that had nothing to do
+    with the shipment itself. _send_shopkeeper_package_pdf already never
+    raises and records its own success/failure on the order, so there's
+    nothing useful for the caller to await here — but we still attach a
+    done-callback to log anything unexpected instead of losing it silently.
+    """
+    task = asyncio.create_task(coro)
+
+    def _log_if_failed(t: asyncio.Task):
+        exc = t.exception() if not t.cancelled() else None
+        if exc:
+            logger.error(f"Background task failed ({description}): {exc}", exc_info=exc)
+
+    task.add_done_callback(_log_if_failed)
+    return task
+
+
 async def _claim_shipment(order_id: str) -> bool:
     """
     Atomically claims this order for shipment creation by flipping
@@ -208,15 +232,22 @@ async def create_shipment_for_order(order: dict) -> dict | None:
             await _release_shipment_claim(order_id, "failed")
             # No NimbusPost label possible without an address — send the
             # fallback package PDF instead, so the shopkeeper still gets
-            # the photo + order details to work from.
+            # the photo + order details to work from. Fire-and-forget so
+            # a slow/unreachable WhatsApp bridge doesn't hold up the caller.
             if shopkeeper:
-                await _send_shopkeeper_package_pdf(order, shopkeeper, None)
+                _fire_and_forget(
+                    _send_shopkeeper_package_pdf(order, shopkeeper, None),
+                    f"package PDF for order {order_id} (no shopkeeper address)",
+                )
             return None
 
         result = await run_blocking(create_shipment, order, shopkeeper)
         if not result:
             await _release_shipment_claim(order_id, "failed")
-            await _send_shopkeeper_package_pdf(order, shopkeeper, None)
+            _fire_and_forget(
+                _send_shopkeeper_package_pdf(order, shopkeeper, None),
+                f"package PDF for order {order_id} (NimbusPost shipment failed)",
+            )
             return None
 
         await run_query(
@@ -233,24 +264,32 @@ async def create_shipment_for_order(order: dict) -> dict | None:
 
         logger.info(f"NimbusPost shipment created for order {order_id}: AWB {result['awb']}")
 
+        # From here on, everything is notification/best-effort work that
+        # shouldn't hold up the caller (the admin's "Ship" click, or the
+        # auto-ship trigger) now that the shipment itself is confirmed
+        # created. Runs in the background; failures are logged, not raised.
         tracking_url = f"https://www.nimbuspost.com/track/{result['awb']}"
-        await run_blocking(
-            send_text, order["customer_phone"],
-            msg_shipped(order["product_name"], result["courier_name"] or "Courier", result["awb"], tracking_url)
-        )
 
-        # Fetch NimbusPost's own official label and merge it (untouched —
-        # never edited, so the barcode/AWB stays valid) with our product
-        # photo page, then send the combined PDF to the shopkeeper.
-        label_bytes = None
-        if result.get("label_url"):
-            try:
-                label_resp = await run_blocking(requests.get, result["label_url"], timeout=15)
-                label_resp.raise_for_status()
-                label_bytes = label_resp.content
-            except Exception as e:
-                logger.warning(f"Could not fetch NimbusPost label PDF for order {order_id}: {e}")
-        await _send_shopkeeper_package_pdf(order, shopkeeper, label_bytes)
+        async def _notify_and_send_package_pdf():
+            await run_blocking(
+                send_text, order["customer_phone"],
+                msg_shipped(order["product_name"], result["courier_name"] or "Courier", result["awb"], tracking_url)
+            )
+
+            # Fetch NimbusPost's own official label and merge it (untouched —
+            # never edited, so the barcode/AWB stays valid) with our product
+            # photo page, then send the combined PDF to the shopkeeper.
+            label_bytes = None
+            if result.get("label_url"):
+                try:
+                    label_resp = await run_blocking(requests.get, result["label_url"], timeout=15)
+                    label_resp.raise_for_status()
+                    label_bytes = label_resp.content
+                except Exception as e:
+                    logger.warning(f"Could not fetch NimbusPost label PDF for order {order_id}: {e}")
+            await _send_shopkeeper_package_pdf(order, shopkeeper, label_bytes)
+
+        _fire_and_forget(_notify_and_send_package_pdf(), f"post-shipment notifications for order {order_id}")
 
         return result
     except Exception as e:

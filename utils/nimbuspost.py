@@ -43,6 +43,14 @@ NIMBUSPOST_API_KEY = os.getenv("NIMBUSPOST_API_KEY", "")
 NIMBUSPOST_EMAIL = os.getenv("NIMBUSPOST_EMAIL", "")
 NIMBUSPOST_PASSWORD = os.getenv("NIMBUSPOST_PASSWORD", "")
 
+# The verified support email NimbusPost requires on the pickup/warehouse for
+# both the warehouse-registration call AND every shipment-creation call.
+# NimbusPost rejects shipment creation with "Support email and phone number
+# on the shipping label must be provided and OTP-verified to proceed." if
+# this is missing from the shipment payload's pickup object — even if the
+# warehouse itself was registered with a verified email separately.
+NIMBUSPOST_SUPPORT_EMAIL = os.getenv("NIMBUSPOST_SUPPORT_EMAIL", "eclothyk@gmail.com")
+
 _REQUEST_TIMEOUT = 15
 
 # ─── Token cache (in-process, refreshed ~1h before 24h expiry) ────────────
@@ -172,7 +180,7 @@ def register_pickup_address(shopkeeper: dict) -> str | None:
     payload = {
         "warehouse_name": f"clovical - {shopkeeper.get('shop_name', '')}",
         "name": shopkeeper.get("shopkeeper_name", ""),
-        "email": "clovical@gmail.com",
+        "email": NIMBUSPOST_SUPPORT_EMAIL,
         "phone": shopkeeper.get("contact", ""),
         "address": shopkeeper.get("address", ""),
         "pincode": shopkeeper.get("pincode", ""),
@@ -257,6 +265,7 @@ def create_shipment(order: dict, shopkeeper: dict) -> dict | None:
         "pickup": {
             "warehouse_name": f"clovical - {shopkeeper.get('shop_name', '')}",
             "name": shopkeeper.get("shopkeeper_name", ""),
+            "email": NIMBUSPOST_SUPPORT_EMAIL,
             "address": shopkeeper.get("address", ""),
             "pincode": shopkeeper.get("pincode", ""),
             "city": shopkeeper.get("city", ""),
