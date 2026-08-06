@@ -509,7 +509,10 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
                         sk_res = await run_query(supabase_admin.table("shopkeepers").select("*").eq("id", shopkeeper_id).single())
                         shopkeeper = sk_res.data
                         if shopkeeper:
-                            await _send_shopkeeper_package_pdf(order, shopkeeper, None)
+                            _fire_and_forget(
+                                _send_shopkeeper_package_pdf(order, shopkeeper, None),
+                                f"package PDF for order {order_id} (manual confirm, auto-ship off)",
+                            )
                         else:
                             logger.warning(f"Shopkeeper {shopkeeper_id} not found — skipping package PDF")
                     else:
