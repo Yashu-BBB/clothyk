@@ -1,5 +1,6 @@
 import os
 import io
+import time
 import logging
 import qrcode
 import requests
@@ -45,20 +46,47 @@ def _to_wpp_number(to: str) -> str:
     return digits
 
 
+# Retry only transient failures — a dropped connection, a timeout, or a 5xx
+# from chatpilot (e.g. mid-reconnect) all mean "we don't know if this went
+# out", so retrying is the right call, worst case being a duplicate message.
+# A 4xx (bad payload, wrong api key) means retrying identical input will
+# just fail identically, so those are not retried.
+_RETRY_ATTEMPTS = int(os.getenv("WA_SEND_RETRY_ATTEMPTS", "3"))
+_RETRY_BACKOFF_SECONDS = [2, 5]  # gaps before attempt 2 and attempt 3
+
+
 def _post(endpoint: str, payload: dict, timeout: int = 45) -> bool:
-    try:
-        r = requests.post(
-            f"{WPP_SERVER_URL}/{endpoint}",
-            json=payload,
-            headers=_headers(),
-            timeout=timeout,
-        )
-        r.raise_for_status()
-        logger.info(f"WhatsApp message sent: {endpoint} to {payload.get('to')}")
-        return True
-    except Exception as e:
-        logger.error(f"WPPConnect API failed ({endpoint}): {e}")
-        return False
+    last_err = None
+    for attempt in range(1, _RETRY_ATTEMPTS + 1):
+        try:
+            r = requests.post(
+                f"{WPP_SERVER_URL}/{endpoint}",
+                json=payload,
+                headers=_headers(),
+                timeout=timeout,
+            )
+            r.raise_for_status()
+            if attempt > 1:
+                logger.info(f"WhatsApp message sent: {endpoint} to {payload.get('to')} (succeeded on retry {attempt})")
+            else:
+                logger.info(f"WhatsApp message sent: {endpoint} to {payload.get('to')}")
+            return True
+        except requests.exceptions.HTTPError as e:
+            last_err = e
+            status = e.response.status_code if e.response is not None else None
+            if status is not None and 400 <= status < 500:
+                logger.error(f"WPPConnect API rejected request ({endpoint}, {status}) — not retrying: {e}")
+                return False
+            logger.warning(f"WPPConnect API {endpoint} attempt {attempt}/{_RETRY_ATTEMPTS} failed ({status}): {e}")
+        except Exception as e:
+            last_err = e
+            logger.warning(f"WPPConnect API {endpoint} attempt {attempt}/{_RETRY_ATTEMPTS} failed: {e}")
+
+        if attempt < _RETRY_ATTEMPTS:
+            time.sleep(_RETRY_BACKOFF_SECONDS[min(attempt - 1, len(_RETRY_BACKOFF_SECONDS) - 1)])
+
+    logger.error(f"WPPConnect API failed after {_RETRY_ATTEMPTS} attempts ({endpoint}) to {payload.get('to')}: {last_err}")
+    return False
 
 
 def send_text(to: str, message: str) -> bool:

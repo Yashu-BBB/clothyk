@@ -3,6 +3,7 @@ load_dotenv()
 import logging
 import time
 import hashlib
+import asyncio
 import sentry_sdk
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
@@ -17,7 +18,7 @@ import redis.asyncio as aioredis
 import os
 
 from routers import auth, products, orders, shopkeepers, admin, whatsapp, analytics, public, categories
-from utils.db import supabase_admin
+from utils.db import supabase_admin, run_query, run_blocking
 from utils.cache import init_redis, close_redis
 
 # ─── Logging ───────────────────────────────────────────────────────────────
@@ -98,7 +99,7 @@ async def health_check():
 
     # Check Supabase DB
     try:
-        supabase_admin.table("admins").select("id").limit(1).execute()
+        await run_query(supabase_admin.table("admins").select("id").limit(1))
         status["db"] = "ok"
     except Exception as e:
         status["db"] = f"error: {str(e)}"
@@ -136,18 +137,25 @@ async def track_and_protect(request: Request, call_next):
             if client_ip in failed_attempts:
                 del failed_attempts[client_ip]
 
-    # Log visitors (only customer pages, not static/api/admin)
+    # Log visitors (only customer pages, not static/api/admin).
+    # Fire-and-forget: this is best-effort analytics, not something the
+    # customer's page render should ever wait on. asyncio.create_task lets
+    # the insert happen in the background while call_next proceeds below.
     path = request.url.path
     if (not path.startswith("/static")
             and not path.startswith("/api")
             and not path.startswith("/admin")):
-        try:
-            supabase_admin.table("visitors").insert({
-                "page": path,
-                "ip_hash": ip_hash
-            }).execute()
-        except Exception:
-            pass
+        async def _log_visitor():
+            try:
+                await run_query(
+                    supabase_admin.table("visitors").insert({
+                        "page": path,
+                        "ip_hash": ip_hash
+                    })
+                )
+            except Exception:
+                pass
+        asyncio.create_task(_log_visitor())
 
     start = time.time()
     response = await call_next(request)

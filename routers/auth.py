@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
-from utils.db import supabase_admin
+from utils.db import supabase_admin, run_query
 from utils.auth_utils import verify_password, create_token
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ async def login(req: LoginRequest, request: Request):
             app_state.failed_attempts.pop(client_ip, None)
 
     try:
-        res = supabase_admin.table("admins").select("*").eq("username", req.username).single().execute()
+        res = await run_query(supabase_admin.table("admins").select("*").eq("username", req.username).single())
     except Exception:
         res = None
 

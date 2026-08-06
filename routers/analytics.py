@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Depends
-from utils.db import supabase_admin
+from utils.db import supabase_admin, run_query
 from utils.auth_utils import require_admin
 from utils.cache import cache_get, cache_set
 
@@ -41,7 +41,8 @@ async def analytics_overview(admin=Depends(require_admin)):
         page = 0
         page_size = 1000
         while True:
-            batch = supabase_admin.table("orders").select("*").range(page * page_size, (page + 1) * page_size - 1).execute().data or []
+            batch_res = await run_query(supabase_admin.table("orders").select("*").range(page * page_size, (page + 1) * page_size - 1))
+            batch = batch_res.data or []
             all_orders.extend(batch)
             if len(batch) < page_size:
                 break
@@ -53,14 +54,17 @@ async def analytics_overview(admin=Depends(require_admin)):
         total_profit = sum(o["profit"] for o in active)
 
         # Visitors
-        visitors = supabase_admin.table("visitors").select("ip_hash").execute().data or []
+        visitors_res = await run_query(supabase_admin.table("visitors").select("ip_hash"))
+        visitors = visitors_res.data or []
         total_visitors = len(visitors)
 
         # Products
-        total_products = supabase_admin.table("products").select("id", count="exact").execute().count or 0
+        total_products_res = await run_query(supabase_admin.table("products").select("id", count="exact"))
+        total_products = total_products_res.count or 0
 
         # Reviews
-        reviews = supabase_admin.table("reviews").select("rating").execute().data or []
+        reviews_res = await run_query(supabase_admin.table("reviews").select("rating"))
+        reviews = reviews_res.data or []
         avg_rating = sum(r["rating"] for r in reviews) / len(reviews) if reviews else 0
 
         # Unique buyers
@@ -97,7 +101,8 @@ async def analytics_overview(admin=Depends(require_admin)):
 
         # Category sales
         from collections import Counter
-        category_res = supabase_admin.table("products").select("id,category").execute().data or []
+        category_res_raw = await run_query(supabase_admin.table("products").select("id,category"))
+        category_res = category_res_raw.data or []
         prod_category = {p["id"]: p["category"] for p in category_res}
         category_sales = Counter()
         for o in active:
@@ -111,11 +116,12 @@ async def analytics_overview(admin=Depends(require_admin)):
         top_products = prod_sales.most_common(5)
 
         # Top viewed products
-        top_viewed_res = supabase_admin.table("products").select("name,view_count").order("view_count", desc=True).limit(5).execute()
+        top_viewed_res = await run_query(supabase_admin.table("products").select("name,view_count").order("view_count", desc=True).limit(5))
         top_viewed = [(p["name"], p["view_count"]) for p in (top_viewed_res.data or [])]
 
         # Shopkeeper analytics
-        shopkeepers = supabase_admin.table("shopkeepers").select("*").execute().data or []
+        shopkeepers_res = await run_query(supabase_admin.table("shopkeepers").select("*"))
+        shopkeepers = shopkeepers_res.data or []
         sk_data = []
         total_owed = 0
         for sk in shopkeepers:

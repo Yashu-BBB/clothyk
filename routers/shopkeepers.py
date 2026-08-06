@@ -1,7 +1,7 @@
 import logging
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
-from utils.db import supabase_admin
+from utils.db import supabase_admin, run_query, run_blocking
 from utils.auth_utils import require_admin
 from utils.nimbuspost import register_pickup_address
 from utils.cache import cache_get, cache_set, two_layer_get, two_layer_set, two_layer_clear_pattern
@@ -54,14 +54,14 @@ async def list_shopkeepers(admin=Depends(require_admin)):
         if cached is not None:
             return cached
 
-        res = supabase_admin.table("shopkeepers").select("*").order("id").execute()
+        res = await run_query(supabase_admin.table("shopkeepers").select("*").order("id"))
         shopkeepers = res.data or []
 
         # Enrich with product/sold counts
         for sk in shopkeepers:
             code = f"#{sk['id']:03d}"
-            prods = supabase_admin.table("products").select("id", count="exact").eq("shopkeeper_code", code).execute()
-            sold = supabase_admin.table("orders").select("id", count="exact").eq("shopkeeper_code", code).not_.eq("status", "cancelled").execute()
+            prods = await run_query(supabase_admin.table("products").select("id", count="exact").eq("shopkeeper_code", code))
+            sold = await run_query(supabase_admin.table("orders").select("id", count="exact").eq("shopkeeper_code", code).not_.eq("status", "cancelled"))
             sk["total_products"] = prods.count or 0
             sk["total_sold"] = sold.count or 0
             sk["code"] = code
@@ -76,7 +76,7 @@ async def list_shopkeepers(admin=Depends(require_admin)):
 @router.post("/admin/add")
 async def add_shopkeeper(data: ShopkeeperCreate, admin=Depends(require_admin)):
     try:
-        res = supabase_admin.table("shopkeepers").insert({
+        res = await run_query(supabase_admin.table("shopkeepers").insert({
             "shop_name": data.shop_name,
             "shopkeeper_name": data.shopkeeper_name,
             "contact": data.contact,
@@ -84,14 +84,14 @@ async def add_shopkeeper(data: ShopkeeperCreate, admin=Depends(require_admin)):
             "pincode": data.pincode,
             "city": data.city,
             "state": data.state,
-        }).execute()
+        }))
         new_sk = res.data[0]
         logger.info(f"Shopkeeper added: {data.shop_name} by admin {admin['sub']}")
 
         # Auto-register NimbusPost pickup address (never blocks shopkeeper creation)
-        pickup_id = _maybe_register_pickup(new_sk)
+        pickup_id = await run_blocking(_maybe_register_pickup, new_sk)
         if pickup_id:
-            supabase_admin.table("shopkeepers").update({"nimbuspost_pickup_id": pickup_id}).eq("id", new_sk["id"]).execute()
+            await run_query(supabase_admin.table("shopkeepers").update({"nimbuspost_pickup_id": pickup_id}).eq("id", new_sk["id"]))
             new_sk["nimbuspost_pickup_id"] = pickup_id
         elif data.address:
             logger.warning(f"NimbusPost pickup registration failed/skipped for new shopkeeper {new_sk['id']}")
@@ -107,14 +107,14 @@ async def add_shopkeeper(data: ShopkeeperCreate, admin=Depends(require_admin)):
 async def update_shopkeeper(sk_id: int, data: ShopkeeperUpdate, admin=Depends(require_admin)):
     try:
         updates = {k: v for k, v in data.dict().items() if v is not None}
-        res = supabase_admin.table("shopkeepers").update(updates).eq("id", sk_id).execute()
+        res = await run_query(supabase_admin.table("shopkeepers").update(updates).eq("id", sk_id))
         updated = res.data[0] if res.data else {}
 
         # Re-register pickup address if address fields changed
         if updated and any(k in updates for k in ("address", "pincode", "city", "state")):
-            pickup_id = _maybe_register_pickup(updated)
+            pickup_id = await run_blocking(_maybe_register_pickup, updated)
             if pickup_id:
-                supabase_admin.table("shopkeepers").update({"nimbuspost_pickup_id": pickup_id}).eq("id", sk_id).execute()
+                await run_query(supabase_admin.table("shopkeepers").update({"nimbuspost_pickup_id": pickup_id}).eq("id", sk_id))
                 updated["nimbuspost_pickup_id"] = pickup_id
             else:
                 logger.warning(f"NimbusPost pickup re-registration failed/skipped for shopkeeper {sk_id}")
@@ -129,7 +129,7 @@ async def update_shopkeeper(sk_id: int, data: ShopkeeperUpdate, admin=Depends(re
 @router.delete("/admin/{sk_id}")
 async def delete_shopkeeper(sk_id: int, admin=Depends(require_admin)):
     try:
-        supabase_admin.table("shopkeepers").delete().eq("id", sk_id).execute()
+        await run_query(supabase_admin.table("shopkeepers").delete().eq("id", sk_id))
         await two_layer_clear_pattern("shopkeepers:")
         return {"success": True}
     except Exception as e:
@@ -145,7 +145,7 @@ async def shopkeepers_dropdown(admin=Depends(require_admin)):
         cached = await two_layer_get(cache_key)
         if cached is not None:
             return cached
-        res = supabase_admin.table("shopkeepers").select("id,shop_name").order("id").execute()
+        res = await run_query(supabase_admin.table("shopkeepers").select("id,shop_name").order("id"))
         data = [{"id": s["id"], "label": f"#{s['id']:03d} - {s['shop_name']}"} for s in (res.data or [])]
         await two_layer_set(cache_key, data, redis_ttl=900, mem_ttl=600)
         return data

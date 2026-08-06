@@ -1,11 +1,12 @@
 import logging
+import requests
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from utils.db import supabase_admin
+from utils.db import supabase_admin, run_query, run_blocking
 from utils.auth_utils import get_admin_from_request, require_admin, hash_password
 from utils.nimbuspost import track_shipment, cancel_shipment, get_couriers
 from utils.cache import (
@@ -36,31 +37,58 @@ async def dashboard_data(request: Request, admin=Depends(require_admin)):
         if cached is not None:
             return cached
 
-        products_count = supabase_admin.table("products").select("id", count="exact").execute().count or 0
+        products_count_res = await run_query(supabase_admin.table("products").select("id", count="exact"))
+        products_count = products_count_res.count or 0
 
         from datetime import datetime, timezone
         today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
 
-        today_orders = supabase_admin.table("orders").select("*")\
-            .gte("created_at", today)\
-            .not_.eq("status","cancelled").execute().data or []
+        today_orders_res = await run_query(
+            supabase_admin.table("orders").select("*")
+            .gte("created_at", today)
+            .not_.eq("status", "cancelled")
+        )
+        today_orders = today_orders_res.data or []
 
-        recent = supabase_admin.table("orders").select("*").order("created_at", desc=True).limit(10).execute().data or []
+        recent_res = await run_query(supabase_admin.table("orders").select("*").order("created_at", desc=True).limit(10))
+        recent = recent_res.data or []
 
-        low_stock = supabase_admin.table("products").select("id,name,stock").lte("stock", 2).gt("stock", 0).execute().data or []
-        out_of_stock = supabase_admin.table("products").select("id,name").eq("stock", 0).execute().data or []
+        low_stock_res = await run_query(supabase_admin.table("products").select("id,name,stock").lte("stock", 2).gt("stock", 0))
+        low_stock = low_stock_res.data or []
 
-        refund_pending = supabase_admin.table("orders").select("*").eq("refund_status","pending").execute().data or []
+        out_of_stock_res = await run_query(supabase_admin.table("products").select("id,name").eq("stock", 0))
+        out_of_stock = out_of_stock_res.data or []
+
+        refund_pending_res = await run_query(supabase_admin.table("orders").select("*").eq("refund_status", "pending"))
+        refund_pending = refund_pending_res.data or []
+
+        # Orders whose shopkeeper package PDF never made it out over WhatsApp
+        # even after send_file_base64's internal retries — surfaced here so
+        # an admin can manually resend via /admin/orders/{id}/resend-package-pdf
+        # instead of the shopkeeper silently never getting their packing slip.
+        failed_pdf_res = await run_query(
+            supabase_admin.table("orders").select("id,customer_name,product_name,created_at").eq("package_pdf_status", "failed")
+        )
+        failed_package_pdfs = failed_pdf_res.data or []
 
         # NimbusPost shipment stats
-        shipments_today = supabase_admin.table("orders").select("id", count="exact")\
-            .gte("created_at", today).eq("shipping_status", "created").execute().count or 0
+        shipments_today_res = await run_query(
+            supabase_admin.table("orders").select("id", count="exact")
+            .gte("created_at", today).eq("shipping_status", "created")
+        )
+        shipments_today = shipments_today_res.count or 0
 
-        pending_shipments = supabase_admin.table("orders").select("id", count="exact")\
-            .eq("status", "confirmed").is_("nimbuspost_awb", "null").execute().count or 0
+        pending_shipments_res = await run_query(
+            supabase_admin.table("orders").select("id", count="exact")
+            .eq("status", "confirmed").is_("nimbuspost_awb", "null")
+        )
+        pending_shipments = pending_shipments_res.count or 0
 
-        in_transit_shipments = supabase_admin.table("orders").select("id", count="exact")\
-            .eq("status", "shipped").not_.is_("nimbuspost_awb", "null").execute().count or 0
+        in_transit_shipments_res = await run_query(
+            supabase_admin.table("orders").select("id", count="exact")
+            .eq("status", "shipped").not_.is_("nimbuspost_awb", "null")
+        )
+        in_transit_shipments = in_transit_shipments_res.count or 0
 
         result = {
             "total_products": products_count,
@@ -74,6 +102,7 @@ async def dashboard_data(request: Request, admin=Depends(require_admin)):
             "shipments_today": shipments_today,
             "pending_shipments": pending_shipments,
             "in_transit_shipments": in_transit_shipments,
+            "failed_package_pdfs": failed_package_pdfs,
         }
         await cache_set(cache_key, result, ttl=120)
         return result
@@ -110,7 +139,7 @@ async def change_password(
     if len(new_pass) < 8:
         raise HTTPException(status_code=400, detail="Password too short")
     hashed = hash_password(new_pass)
-    supabase_admin.table("admins").update({"password": hashed}).eq("username", admin["sub"]).execute()
+    await run_query(supabase_admin.table("admins").update({"password": hashed}).eq("username", admin["sub"]))
     return {"success": True}
 
 
@@ -124,7 +153,7 @@ async def get_shipment_label(order_id: str, admin=Depends(require_admin)):
         if cached is not None:
             return cached
 
-        res = supabase_admin.table("orders").select("label_url").eq("id", order_id).single().execute()
+        res = await run_query(supabase_admin.table("orders").select("label_url").eq("id", order_id).single())
         order = res.data
         if not order or not order.get("label_url"):
             raise HTTPException(status_code=404, detail="No shipping label available for this order")
@@ -145,7 +174,7 @@ async def ship_order(order_id: str, admin=Depends(require_admin)):
     from routers.orders import create_shipment_for_order
 
     try:
-        res = supabase_admin.table("orders").select("*").eq("id", order_id).single().execute()
+        res = await run_query(supabase_admin.table("orders").select("*").eq("id", order_id).single())
         order = res.data
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
@@ -157,9 +186,12 @@ async def ship_order(order_id: str, admin=Depends(require_admin)):
         if not (os.getenv("NIMBUSPOST_API_KEY") or (os.getenv("NIMBUSPOST_EMAIL") and os.getenv("NIMBUSPOST_PASSWORD"))):
             raise HTTPException(status_code=400, detail="NimbusPost not configured")
 
-        result = create_shipment_for_order(order)
+        result = await create_shipment_for_order(order)
         if not result:
-            raise HTTPException(status_code=502, detail="Shipment creation failed — check shopkeeper address and NimbusPost status, then retry")
+            raise HTTPException(
+                status_code=502,
+                detail="Shipment creation failed, or a shipment attempt for this order was already in progress — check the order's shipping status and retry if it's still not 'created'"
+            )
 
         logger.info(f"Admin {admin['sub']} manually created shipment for order {order_id}: AWB {result['awb']}")
         return {"success": True, **result}
@@ -170,19 +202,71 @@ async def ship_order(order_id: str, admin=Depends(require_admin)):
         raise HTTPException(status_code=500, detail="Failed to create shipment")
 
 
+@router.post("/orders/{order_id}/resend-package-pdf")
+async def resend_package_pdf(order_id: str, admin=Depends(require_admin)):
+    """
+    Manually re-triggers the shopkeeper package PDF (photo + label/slip) for
+    one order — for when it's stuck at package_pdf_status='failed' (WhatsApp
+    send failed even after automatic retries) or an admin just wants to
+    re-send it. Re-fetches NimbusPost's label fresh from label_url if the
+    order already has one, so the barcode/AWB on page 2 is still correct.
+    """
+    from routers.orders import _send_shopkeeper_package_pdf
+
+    try:
+        res = await run_query(supabase_admin.table("orders").select("*").eq("id", order_id).single())
+        order = res.data
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        shopkeeper_id = order.get("shopkeeper_id")
+        if not shopkeeper_id:
+            raise HTTPException(status_code=400, detail="Order has no shopkeeper assigned")
+
+        sk_res = await run_query(supabase_admin.table("shopkeepers").select("*").eq("id", shopkeeper_id).single())
+        shopkeeper = sk_res.data
+        if not shopkeeper:
+            raise HTTPException(status_code=404, detail="Shopkeeper not found")
+
+        label_bytes = None
+        if order.get("label_url"):
+            try:
+                label_resp = await run_blocking(requests.get, order["label_url"], timeout=15)
+                label_resp.raise_for_status()
+                label_bytes = label_resp.content
+            except Exception as e:
+                logger.warning(f"Could not refetch NimbusPost label for resend on order {order_id}: {e}")
+
+        await _send_shopkeeper_package_pdf(order, shopkeeper, label_bytes)
+
+        # Re-read so the caller sees the outcome (sent/failed) immediately.
+        updated = await run_query(supabase_admin.table("orders").select("package_pdf_status").eq("id", order_id).single())
+        status = (updated.data or {}).get("package_pdf_status")
+        if status != "sent":
+            raise HTTPException(status_code=502, detail="Resend attempt failed — check WhatsApp/chatpilot connectivity and retry")
+
+        logger.info(f"Admin {admin['sub']} resent package PDF for order {order_id}")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Package PDF resend failed for order {order_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to resend package PDF")
+
+
 @router.post("/orders/{order_id}/cancel-shipment")
 async def cancel_order_shipment(order_id: str, admin=Depends(require_admin)):
     try:
-        res = supabase_admin.table("orders").select("nimbuspost_awb").eq("id", order_id).single().execute()
+        res = await run_query(supabase_admin.table("orders").select("nimbuspost_awb").eq("id", order_id).single())
         order = res.data
         if not order or not order.get("nimbuspost_awb"):
             raise HTTPException(status_code=404, detail="No NimbusPost shipment found for this order")
 
-        ok = cancel_shipment(order["nimbuspost_awb"])
+        ok = await run_blocking(cancel_shipment, order["nimbuspost_awb"])
         if not ok:
             raise HTTPException(status_code=502, detail="NimbusPost cancellation failed — please retry")
 
-        supabase_admin.table("orders").update({"shipping_status": "cancelled"}).eq("id", order_id).execute()
+        await run_query(supabase_admin.table("orders").update({"shipping_status": "cancelled"}).eq("id", order_id))
         logger.info(f"Admin {admin['sub']} cancelled shipment for order {order_id}")
         return {"success": True}
     except HTTPException:
@@ -195,12 +279,12 @@ async def cancel_order_shipment(order_id: str, admin=Depends(require_admin)):
 @router.get("/orders/{order_id}/track")
 async def track_order_shipment(order_id: str, admin=Depends(require_admin)):
     try:
-        res = supabase_admin.table("orders").select("nimbuspost_awb").eq("id", order_id).single().execute()
+        res = await run_query(supabase_admin.table("orders").select("nimbuspost_awb").eq("id", order_id).single())
         order = res.data
         if not order or not order.get("nimbuspost_awb"):
             raise HTTPException(status_code=404, detail="No NimbusPost shipment found for this order")
 
-        tracking = track_shipment(order["nimbuspost_awb"])
+        tracking = await run_blocking(track_shipment, order["nimbuspost_awb"])
         if tracking is None:
             raise HTTPException(status_code=502, detail="NimbusPost tracking unavailable right now — please retry")
 
@@ -221,7 +305,7 @@ async def test_nimbuspost_connection(admin=Depends(require_admin)):
     — use this to isolate whether an issue is auth-wide or specific to
     the warehouse/pickup-address call.
     """
-    result = get_couriers()
+    result = await run_blocking(get_couriers)
     logger.info(f"NimbusPost connection test by admin {admin['sub']}: {result}")
     return result
 
@@ -239,7 +323,7 @@ async def get_setting(key: str, admin=Depends(require_admin)):
         cached = await two_layer_get(cache_key)
         if cached is not None:
             return cached
-        res = supabase_admin.table("settings").select("*").eq("key", key).maybe_single().execute()
+        res = await run_query(supabase_admin.table("settings").select("*").eq("key", key).maybe_single())
         result = res.data or {"key": key, "value": None}
         await two_layer_set(cache_key, result, redis_ttl=300, mem_ttl=120)
         return result
@@ -251,7 +335,7 @@ async def get_setting(key: str, admin=Depends(require_admin)):
 @router.put("/settings/{key}")
 async def update_setting(key: str, data: SettingUpdate, admin=Depends(require_admin)):
     try:
-        supabase_admin.table("settings").upsert({"key": key, "value": data.value}).execute()
+        await run_query(supabase_admin.table("settings").upsert({"key": key, "value": data.value}))
         logger.info(f"Setting updated: {key} = {data.value} by admin {admin['sub']}")
         await two_layer_clear_pattern("settings:")
         mem_delete("settings:delivery_fee")
@@ -277,9 +361,11 @@ async def public_settings():
         if cached is not None:
             return cached
 
-        res = supabase_admin.table("settings").select("key,value").in_(
-            "key", ["girls_section_enabled", "delivery_fee"]
-        ).execute()
+        res = await run_query(
+            supabase_admin.table("settings").select("key,value").in_(
+                "key", ["girls_section_enabled", "delivery_fee"]
+            )
+        )
         result = {row["key"]: row["value"] for row in (res.data or [])}
         # Ensure defaults if rows don't exist yet
         result.setdefault("girls_section_enabled", "false")

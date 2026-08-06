@@ -3,7 +3,7 @@ from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel, Field
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from utils.db import supabase_admin
+from utils.db import supabase_admin, run_query
 from utils.auth_utils import require_admin
 from utils.cache import two_layer_get, two_layer_set, two_layer_clear_pattern
 
@@ -39,7 +39,7 @@ async def list_categories(request: Request, gender: str | None = None):
         q = supabase_admin.table("categories").select("*").order("sort_order")
         if gender:
             q = q.eq("gender", gender)
-        res = q.execute()
+        res = await run_query(q)
         data = res.data or []
         await two_layer_set(cache_key, data, redis_ttl=3600, mem_ttl=1800)
         return data
@@ -56,7 +56,7 @@ async def boys_categories(request: Request):
         cached = await two_layer_get(cache_key)
         if cached is not None:
             return cached
-        res = supabase_admin.table("categories").select("*").eq("gender", "Boys").order("sort_order").execute()
+        res = await run_query(supabase_admin.table("categories").select("*").eq("gender", "Boys").order("sort_order"))
         data = res.data or []
         await two_layer_set(cache_key, data, redis_ttl=3600, mem_ttl=1800)
         return data
@@ -73,7 +73,7 @@ async def girls_categories(request: Request):
         cached = await two_layer_get(cache_key)
         if cached is not None:
             return cached
-        res = supabase_admin.table("categories").select("*").eq("gender", "Girls").order("sort_order").execute()
+        res = await run_query(supabase_admin.table("categories").select("*").eq("gender", "Girls").order("sort_order"))
         data = res.data or []
         await two_layer_set(cache_key, data, redis_ttl=3600, mem_ttl=1800)
         return data
@@ -88,7 +88,7 @@ async def warm_categories_cache():
         q = supabase_admin.table("categories").select("*").order("sort_order")
         if gender:
             q = q.eq("gender", gender)
-        res = q.execute()
+        res = await run_query(q)
         data = res.data or []
         key = f"categories:all:{gender}"
         await two_layer_set(key, data, redis_ttl=3600, mem_ttl=1800)
@@ -100,7 +100,7 @@ async def warm_categories_cache():
 @router.get("/admin/all")
 async def admin_list_categories(admin=Depends(require_admin)):
     try:
-        res = supabase_admin.table("categories").select("*").order("gender").order("sort_order").execute()
+        res = await run_query(supabase_admin.table("categories").select("*").order("gender").order("sort_order"))
         return res.data or []
     except Exception as e:
         logger.error(f"Admin: failed to list categories: {e}", exc_info=True)
@@ -112,12 +112,12 @@ async def add_category(data: CategoryCreate, admin=Depends(require_admin)):
     if data.gender not in ("Boys", "Girls"):
         raise HTTPException(status_code=400, detail="Gender must be Boys or Girls")
     try:
-        res = supabase_admin.table("categories").insert({
+        res = await run_query(supabase_admin.table("categories").insert({
             "name": data.name,
             "icon": data.icon,
             "gender": data.gender,
             "sort_order": data.sort_order
-        }).execute()
+        }))
         await two_layer_clear_pattern("categories:")
         logger.info(f"Category added: {data.name} by admin {admin['sub']}")
         return res.data[0]
@@ -130,7 +130,7 @@ async def add_category(data: CategoryCreate, admin=Depends(require_admin)):
 async def update_category(cat_id: int, data: CategoryUpdate, admin=Depends(require_admin)):
     try:
         updates = {k: v for k, v in data.dict().items() if v is not None}
-        res = supabase_admin.table("categories").update(updates).eq("id", cat_id).execute()
+        res = await run_query(supabase_admin.table("categories").update(updates).eq("id", cat_id))
         await two_layer_clear_pattern("categories:")
         return res.data[0] if res.data else {}
     except Exception as e:
@@ -141,7 +141,7 @@ async def update_category(cat_id: int, data: CategoryUpdate, admin=Depends(requi
 @router.delete("/admin/{cat_id}")
 async def delete_category(cat_id: int, admin=Depends(require_admin)):
     try:
-        supabase_admin.table("categories").delete().eq("id", cat_id).execute()
+        await run_query(supabase_admin.table("categories").delete().eq("id", cat_id))
         await two_layer_clear_pattern("categories:")
         return {"success": True}
     except Exception as e:

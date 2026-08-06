@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel, Field
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from utils.db import supabase_admin
+from utils.db import supabase_admin, run_query, run_blocking
 from utils.auth_utils import require_admin
 from utils.captcha import verify_turnstile
 from utils.whatsapp_utils import send_text, send_image_url, send_file_base64, send_upi_qr, msg_order_received, msg_shipped, msg_refund_processed
@@ -42,23 +42,27 @@ class StatusUpdate(BaseModel):
 
 # ─── NimbusPost auto-ship helpers ──────────────────────────────────────────
 
-def _is_auto_ship_enabled() -> bool:
+async def _is_auto_ship_enabled() -> bool:
     """Reads the nimbuspost_auto_mode toggle from the settings table."""
     try:
-        res = supabase_admin.table("settings").select("value").eq("key", "nimbuspost_auto_mode").maybe_single().execute()
+        res = await run_query(
+            supabase_admin.table("settings").select("value").eq("key", "nimbuspost_auto_mode").maybe_single()
+        )
         return bool(res.data and res.data.get("value") == "true")
     except Exception as e:
         logger.warning(f"Could not read nimbuspost_auto_mode setting, defaulting to manual: {e}")
         return False
 
 
-def get_delivery_fee() -> float:
+async def get_delivery_fee() -> float:
     """
     Reads the admin-configured delivery fee from the settings table.
     Defaults to 0 if not set or unreadable, so checkout never breaks.
     """
     try:
-        res = supabase_admin.table("settings").select("value").eq("key", "delivery_fee").maybe_single().execute()
+        res = await run_query(
+            supabase_admin.table("settings").select("value").eq("key", "delivery_fee").maybe_single()
+        )
         return float(res.data.get("value", 0)) if res.data and res.data.get("value") else 0.0
     except Exception as e:
         logger.warning(f"Could not read delivery_fee setting, defaulting to 0: {e}")
@@ -72,34 +76,105 @@ async def public_delivery_fee():
     cached = await two_layer_get(cache_key)
     if cached is not None:
         return cached
-    result = {"delivery_fee": get_delivery_fee()}
+    result = {"delivery_fee": await get_delivery_fee()}
     await two_layer_set(cache_key, result, redis_ttl=300, mem_ttl=120)
     return result
 
 
-def _send_shopkeeper_package_pdf(order: dict, shopkeeper: dict, nimbuspost_label_bytes: bytes | None):
+async def _mark_package_pdf_status(order_id: str, status: str):
+    """
+    Records whether the shopkeeper package PDF (photo + label) actually made
+    it out over WhatsApp. `status` is 'sent' or 'failed'. This is what lets
+    admins see (and manually resend) orders where the shopkeeper never got
+    their packing PDF, instead of that failure only existing in a log line.
+    """
+    try:
+        await run_query(
+            supabase_admin.table("orders").update({"package_pdf_status": status}).eq("id", order_id)
+        )
+    except Exception as e:
+        logger.error(f"Failed to record package_pdf_status={status} for order {order_id}: {e}", exc_info=True)
+
+
+async def _send_shopkeeper_package_pdf(order: dict, shopkeeper: dict, nimbuspost_label_bytes: bytes | None):
     """
     Builds the 2-page shopkeeper PDF (product photo + either NimbusPost's
     untouched label or our own fallback slip) and sends it via WhatsApp.
     Never raises — a notification failure must never block order/shipment
-    processing.
+    processing. The PDF build (reportlab/pypdf + an image fetch) and the
+    WhatsApp send are both blocking work, so both run off the event loop.
+
+    utils.whatsapp_utils.send_file_base64 already retries transient network
+    failures internally; if it still fails after those retries, we record
+    that on the order so it shows up for admins to manually resend rather
+    than silently vanishing.
     """
+    order_id = order.get("id")
     try:
         contact = shopkeeper.get("contact") if shopkeeper else None
         if not contact:
-            logger.warning(f"Shopkeeper has no contact number — skipping package PDF for order {order.get('id')}")
+            logger.warning(f"Shopkeeper has no contact number — skipping package PDF for order {order_id}")
+            await _mark_package_pdf_status(order_id, "failed")
             return
-        pdf_bytes = build_shopkeeper_package_pdf(order, shopkeeper, nimbuspost_label_bytes)
-        send_file_base64(
-            contact, pdf_bytes,
-            filename=f"order_{str(order.get('id'))[:8]}.pdf",
+        pdf_bytes = await run_blocking(build_shopkeeper_package_pdf, order, shopkeeper, nimbuspost_label_bytes)
+        ok = await run_blocking(
+            send_file_base64, contact, pdf_bytes,
+            filename=f"order_{str(order_id)[:8]}.pdf",
             caption="📦 New order — photo on page 1, shipping details on page 2. Print double-sided and attach to the package."
         )
+        await _mark_package_pdf_status(order_id, "sent" if ok else "failed")
     except Exception as e:
-        logger.warning(f"Shopkeeper package PDF failed for order {order.get('id')}: {e}")
+        logger.warning(f"Shopkeeper package PDF failed for order {order_id}: {e}")
+        await _mark_package_pdf_status(order_id, "failed")
 
 
-def create_shipment_for_order(order: dict) -> dict | None:
+async def _claim_shipment(order_id: str) -> bool:
+    """
+    Atomically claims this order for shipment creation by flipping
+    shipping_status to 'creating', but only if nothing has claimed or
+    completed it yet.
+
+    This exists because `if order.get("nimbuspost_awb")` alone is a classic
+    check-then-act race: two triggers landing close together (e.g. an admin
+    clicking "Ship" at the same moment auto-ship also fires from a status
+    update) can both pass that check before either has written anything,
+    and both go on to call NimbusPost — creating two shipments (and two
+    wallet debits) for one order.
+
+    A single Postgres UPDATE is atomic at the row level, so when two
+    requests race to run this at once, only one of them can match the
+    WHERE clause and get shipping_status back as 'creating' in its response;
+    the other gets an empty result and backs off. That makes the UPDATE
+    itself the lock — no separate locking table needed.
+    """
+    try:
+        q = (
+            supabase_admin.table("orders")
+            .update({"shipping_status": "creating"})
+            .eq("id", order_id)
+            .is_("nimbuspost_awb", "null")
+            .or_("shipping_status.is.null,shipping_status.neq.creating")
+        )
+        res = await run_query(q)
+        return bool(res.data)
+    except Exception as e:
+        logger.error(f"Shipment claim check failed for order {order_id}: {e}", exc_info=True)
+        return False  # fail closed — don't risk a duplicate shipment on a DB error
+
+
+async def _release_shipment_claim(order_id: str, status: str = "failed"):
+    """Releases the 'creating' claim after an unsuccessful attempt, so a
+    later retry (manual re-ship or the next auto-ship trigger) isn't
+    permanently blocked behind a stuck 'creating' status."""
+    try:
+        await run_query(
+            supabase_admin.table("orders").update({"shipping_status": status}).eq("id", order_id)
+        )
+    except Exception as e:
+        logger.error(f"Failed to release shipment claim for order {order_id}: {e}", exc_info=True)
+
+
+async def create_shipment_for_order(order: dict) -> dict | None:
     """
     Fetches the order's shopkeeper and calls NimbusPost to create a
     shipment, then persists the returned AWB/courier/label on the order
@@ -107,52 +182,62 @@ def create_shipment_for_order(order: dict) -> dict | None:
 
     Shared between the auto-ship flow here and the manual "Create Shipment"
     admin endpoint in routers/admin.py. Returns the NimbusPost result dict
-    on success, or None on failure (never raises — shipment failures must
-    never block the rest of the order flow).
+    on success, or None on failure/duplicate-skip (never raises — shipment
+    failures must never block the rest of the order flow).
     """
+    order_id = order.get("id")
     try:
         if order.get("nimbuspost_awb"):
-            logger.info(f"Order {order['id']} already has a NimbusPost shipment — skipping")
+            logger.info(f"Order {order_id} already has a NimbusPost shipment — skipping")
+            return None
+
+        if not await _claim_shipment(order_id):
+            logger.info(f"Order {order_id} shipment already created or in progress elsewhere — skipping duplicate attempt")
             return None
 
         shopkeeper_id = order.get("shopkeeper_id")
         if not shopkeeper_id:
-            logger.warning(f"Order {order['id']} has no shopkeeper_id — cannot create shipment")
+            logger.warning(f"Order {order_id} has no shopkeeper_id — cannot create shipment")
+            await _release_shipment_claim(order_id, "failed")
             return None
 
-        sk_res = supabase_admin.table("shopkeepers").select("*").eq("id", shopkeeper_id).single().execute()
+        sk_res = await run_query(supabase_admin.table("shopkeepers").select("*").eq("id", shopkeeper_id).single())
         shopkeeper = sk_res.data
         if not shopkeeper or not shopkeeper.get("address"):
-            logger.warning(f"Shopkeeper {shopkeeper_id} has no registered address — cannot create shipment for order {order['id']}")
+            logger.warning(f"Shopkeeper {shopkeeper_id} has no registered address — cannot create shipment for order {order_id}")
+            await _release_shipment_claim(order_id, "failed")
             # No NimbusPost label possible without an address — send the
             # fallback package PDF instead, so the shopkeeper still gets
             # the photo + order details to work from.
             if shopkeeper:
-                _send_shopkeeper_package_pdf(order, shopkeeper, None)
+                await _send_shopkeeper_package_pdf(order, shopkeeper, None)
             return None
 
-        result = create_shipment(order, shopkeeper)
+        result = await run_blocking(create_shipment, order, shopkeeper)
         if not result:
-            supabase_admin.table("orders").update({"shipping_status": "failed"}).eq("id", order["id"]).execute()
-            _send_shopkeeper_package_pdf(order, shopkeeper, None)
+            await _release_shipment_claim(order_id, "failed")
+            await _send_shopkeeper_package_pdf(order, shopkeeper, None)
             return None
 
-        supabase_admin.table("orders").update({
-            "nimbuspost_awb": result["awb"],
-            "tracking_id": result["awb"],
-            "courier_name": result["courier_name"],
-            "label_url": result["label_url"],
-            "nimbuspost_shipment_id": result["shipment_id"],
-            "shipping_status": "created",
-            "status": "shipped",
-        }).eq("id", order["id"]).execute()
+        await run_query(
+            supabase_admin.table("orders").update({
+                "nimbuspost_awb": result["awb"],
+                "tracking_id": result["awb"],
+                "courier_name": result["courier_name"],
+                "label_url": result["label_url"],
+                "nimbuspost_shipment_id": result["shipment_id"],
+                "shipping_status": "created",
+                "status": "shipped",
+            }).eq("id", order_id)
+        )
 
-        logger.info(f"NimbusPost shipment created for order {order['id']}: AWB {result['awb']}")
+        logger.info(f"NimbusPost shipment created for order {order_id}: AWB {result['awb']}")
 
         tracking_url = f"https://www.nimbuspost.com/track/{result['awb']}"
-        send_text(order["customer_phone"], msg_shipped(
-            order["product_name"], result["courier_name"] or "Courier", result["awb"], tracking_url
-        ))
+        await run_blocking(
+            send_text, order["customer_phone"],
+            msg_shipped(order["product_name"], result["courier_name"] or "Courier", result["awb"], tracking_url)
+        )
 
         # Fetch NimbusPost's own official label and merge it (untouched —
         # never edited, so the barcode/AWB stays valid) with our product
@@ -160,16 +245,17 @@ def create_shipment_for_order(order: dict) -> dict | None:
         label_bytes = None
         if result.get("label_url"):
             try:
-                label_resp = requests.get(result["label_url"], timeout=15)
+                label_resp = await run_blocking(requests.get, result["label_url"], timeout=15)
                 label_resp.raise_for_status()
                 label_bytes = label_resp.content
             except Exception as e:
-                logger.warning(f"Could not fetch NimbusPost label PDF for order {order['id']}: {e}")
-        _send_shopkeeper_package_pdf(order, shopkeeper, label_bytes)
+                logger.warning(f"Could not fetch NimbusPost label PDF for order {order_id}: {e}")
+        await _send_shopkeeper_package_pdf(order, shopkeeper, label_bytes)
 
         return result
     except Exception as e:
-        logger.error(f"create_shipment_for_order failed for order {order.get('id')}: {e}", exc_info=True)
+        logger.error(f"create_shipment_for_order failed for order {order_id}: {e}", exc_info=True)
+        await _release_shipment_claim(order_id, "failed")
         return None
 
 
@@ -200,7 +286,7 @@ async def create_order(order: OrderRequest, request: Request):
 
     # Fetch product (including hidden price)
     try:
-        prod_res = supabase_admin.table("products").select("*").eq("id", order.product_id).single().execute()
+        prod_res = await run_query(supabase_admin.table("products").select("*").eq("id", order.product_id).single())
     except Exception as e:
         logger.error(f"Order save failed - product fetch: {e}", exc_info=True)
         raise HTTPException(status_code=404, detail="Product not found")
@@ -211,7 +297,7 @@ async def create_order(order: OrderRequest, request: Request):
 
     # Delivery fee is frozen at order-creation time (from the admin setting)
     # so later changes to the setting never alter an existing order's total.
-    delivery_fee = get_delivery_fee()
+    delivery_fee = await get_delivery_fee()
 
     # Main product photo, denormalized onto the order so it stays correct
     # even if the product is later edited or removed. Prefer the new
@@ -244,7 +330,7 @@ async def create_order(order: OrderRequest, request: Request):
             "delivery_fee": delivery_fee,
             "agent_state": {}
         }
-        res = supabase_admin.table("orders").insert(order_data).execute()
+        res = await run_query(supabase_admin.table("orders").insert(order_data))
         new_order = res.data[0]
         logger.info(f"Order created: {new_order['id']}, customer: {order.customer_phone}, product: {prod['name']}")
 
@@ -259,14 +345,15 @@ async def create_order(order: OrderRequest, request: Request):
     # since we read it above. If it has (a concurrent order beat us to it),
     # roll back the order we just created instead of allowing stock to go negative.
     try:
-        stock_result = supabase_admin.table("products")\
-            .update({"stock": prod["stock"] - 1})\
-            .eq("id", order.product_id)\
-            .eq("stock", prod["stock"])\
-            .execute()
+        stock_result = await run_query(
+            supabase_admin.table("products")
+            .update({"stock": prod["stock"] - 1})
+            .eq("id", order.product_id)
+            .eq("stock", prod["stock"])
+        )
 
         if not stock_result.data:
-            supabase_admin.table("orders").delete().eq("id", new_order["id"]).execute()
+            await run_query(supabase_admin.table("orders").delete().eq("id", new_order["id"]))
             logger.warning(f"Stock race condition detected for {order.product_id} — order {new_order['id']} rolled back")
             raise HTTPException(
                 status_code=409,
@@ -318,7 +405,7 @@ async def admin_list_orders(
         q = supabase_admin.table("orders").select("*").order("created_at", desc=True)
         if status:
             q = q.eq("status", status)
-        res = q.execute()
+        res = await run_query(q)
         return res.data or []
     except Exception as e:
         logger.error(f"Admin: list orders failed: {e}", exc_info=True)
@@ -328,7 +415,7 @@ async def admin_list_orders(
 @router.put("/admin/{order_id}")
 async def update_order(order_id: str, update: StatusUpdate, admin=Depends(require_admin)):
     try:
-        current = supabase_admin.table("orders").select("*").eq("id", order_id).single().execute()
+        current = await run_query(supabase_admin.table("orders").select("*").eq("id", order_id).single())
         if not current.data:
             raise HTTPException(status_code=404, detail="Order not found")
         order = current.data
@@ -345,7 +432,7 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
         if update.refund_status:
             updates["refund_status"] = update.refund_status
 
-        supabase_admin.table("orders").update(updates).eq("id", order_id).execute()
+        await run_query(supabase_admin.table("orders").update(updates).eq("id", order_id))
         logger.info(f"Order status updated: {order_id}, {order['status']} → {update.status}")
 
         await cache_delete("admin:dashboard")
@@ -358,16 +445,17 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
         if update.status == "shipped" and update.tracking_id:
             courier = update.courier_name or "Courier"
             tracking_url = f"https://www.delhivery.com/track/package/{update.tracking_id}"
-            send_text(phone, msg_shipped(order["product_name"], courier, update.tracking_id, tracking_url))
+            await run_blocking(send_text, phone, msg_shipped(order["product_name"], courier, update.tracking_id, tracking_url))
 
         delivery_fee = order.get("delivery_fee") or 0
         total_amount = order.get("total_amount") or (order["our_price"] + delivery_fee)
 
         if update.status == "confirmed" and order.get("payment_type") == "upi" and update.payment_status == "verified":
             from utils.whatsapp_utils import msg_payment_confirmed
-            send_text(phone, msg_payment_confirmed(
-                order["product_name"], order["size"], order["color"], total_amount, delivery_fee
-            ))
+            await run_blocking(
+                send_text, phone,
+                msg_payment_confirmed(order["product_name"], order["size"], order["color"], total_amount, delivery_fee)
+            )
 
             # Send the shopkeeper their package PDF (product photo + either
             # NimbusPost's label or our fallback slip). If auto-ship is on,
@@ -375,14 +463,14 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
             # sends it exactly once from there — sending it here too would
             # duplicate it. If auto-ship is off, no shipment will ever be
             # attempted automatically, so send the fallback version now.
-            if not _is_auto_ship_enabled():
+            if not await _is_auto_ship_enabled():
                 try:
                     shopkeeper_id = order.get("shopkeeper_id")
                     if shopkeeper_id:
-                        sk_res = supabase_admin.table("shopkeepers").select("*").eq("id", shopkeeper_id).single().execute()
+                        sk_res = await run_query(supabase_admin.table("shopkeepers").select("*").eq("id", shopkeeper_id).single())
                         shopkeeper = sk_res.data
                         if shopkeeper:
-                            _send_shopkeeper_package_pdf(order, shopkeeper, None)
+                            await _send_shopkeeper_package_pdf(order, shopkeeper, None)
                         else:
                             logger.warning(f"Shopkeeper {shopkeeper_id} not found — skipping package PDF")
                     else:
@@ -391,16 +479,16 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
                     logger.warning(f"Shopkeeper package PDF failed for order {order_id}: {e}")
 
         if update.refund_status == "processed":
-            send_text(phone, msg_refund_processed(total_amount))
+            await run_blocking(send_text, phone, msg_refund_processed(total_amount))
 
         # NimbusPost auto-ship: only fires when payment is verified on a
         # confirmed order and the auto-mode setting is turned on. In manual
         # mode, admins trigger shipment creation from the Orders page instead.
         if (update.status == "confirmed"
                 and update.payment_status == "verified"
-                and _is_auto_ship_enabled()):
+                and await _is_auto_ship_enabled()):
             merged_order = {**order, **updates}
-            create_shipment_for_order(merged_order)
+            await create_shipment_for_order(merged_order)
 
         return {"success": True}
     except HTTPException:
@@ -417,7 +505,7 @@ async def recent_orders(admin=Depends(require_admin)):
         cached = await cache_get(cache_key)
         if cached is not None:
             return cached
-        res = supabase_admin.table("orders").select("*").order("created_at", desc=True).limit(10).execute()
+        res = await run_query(supabase_admin.table("orders").select("*").order("created_at", desc=True).limit(10))
         data = res.data or []
         await cache_set(cache_key, data, ttl=60)
         return data

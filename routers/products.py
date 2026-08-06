@@ -7,7 +7,7 @@ from slowapi.util import get_remote_address
 import json
 import uuid
 
-from utils.db import supabase_admin
+from utils.db import supabase_admin, run_query, run_blocking
 from utils.cache import (
     cache_get, cache_set, cache_clear_pattern,
     two_layer_get, two_layer_set, two_layer_clear_pattern, mem_clear_pattern,
@@ -95,7 +95,7 @@ async def list_products(
         else:
             query = query.order("created_at", desc=True)
 
-        res = query.execute()
+        res = await run_query(query)
         data = res.data or []
         await cache_set(cache_key, data, ttl=900)
         return data
@@ -115,7 +115,7 @@ async def get_filter_options(request: Request, gender: Optional[str] = None):
         query = supabase_admin.table("products").select("sizes,colors,our_price").gt("stock", 0)
         if gender:
             query = query.eq("gender", gender)
-        res = query.execute()
+        res = await run_query(query)
         rows = res.data or []
 
         size_set, color_set = set(), set()
@@ -149,7 +149,7 @@ async def featured_products():
     if cached:
         return cached
     try:
-        res = supabase_admin.table("products").select(SAFE_FIELDS).eq("featured", True).gt("stock", 0).limit(8).execute()
+        res = await run_query(supabase_admin.table("products").select(SAFE_FIELDS).eq("featured", True).gt("stock", 0).limit(8))
         data = res.data or []
         await cache_set("products:featured", data, ttl=900)
         return data
@@ -164,7 +164,7 @@ async def list_categories():
     if cached:
         return cached
     try:
-        res = supabase_admin.table("products").select("category").gt("stock", 0).execute()
+        res = await run_query(supabase_admin.table("products").select("category").gt("stock", 0))
         cats = list(set(p["category"] for p in (res.data or []) if p.get("category")))
         await cache_set("products:categories", cats, ttl=1800)
         return cats
@@ -184,20 +184,20 @@ async def get_product(request: Request, product_id: str):
             # Read the live count rather than the cached one so concurrent
             # cache hits don't clobber each other's increments.
             try:
-                live = supabase_admin.table("products").select("view_count").eq("id", product_id).single().execute()
+                live = await run_query(supabase_admin.table("products").select("view_count").eq("id", product_id).single())
                 if live.data:
                     new_count = live.data["view_count"] + 1
-                    supabase_admin.table("products").update({"view_count": new_count}).eq("id", product_id).execute()
+                    await run_query(supabase_admin.table("products").update({"view_count": new_count}).eq("id", product_id))
                     cached = {**cached, "view_count": new_count}
                     logger.info(f"Product view incremented (cache hit): {product_id}")
             except Exception as e:
                 logger.warning(f"View count increment failed for {product_id}: {e}")
             return cached
 
-        res = supabase_admin.table("products").select(SAFE_FIELDS).eq("id", product_id).single().execute()
+        res = await run_query(supabase_admin.table("products").select(SAFE_FIELDS).eq("id", product_id).single())
         if not res.data:
             raise HTTPException(status_code=404, detail="Product not found")
-        supabase_admin.table("products").update({"view_count": res.data["view_count"] + 1}).eq("id", product_id).execute()
+        await run_query(supabase_admin.table("products").update({"view_count": res.data["view_count"] + 1}).eq("id", product_id))
         logger.info(f"Product view incremented: {product_id}")
         await two_layer_set(cache_key, res.data, redis_ttl=900, mem_ttl=120)
         return res.data
@@ -216,13 +216,13 @@ async def related_products(product_id: str):
         if cached:
             return cached
 
-        prod = supabase_admin.table("products").select("category,gender").eq("id", product_id).single().execute()
+        prod = await run_query(supabase_admin.table("products").select("category,gender").eq("id", product_id).single())
         if not prod.data:
             return []
         q = supabase_admin.table("products").select(SAFE_FIELDS).eq("category", prod.data["category"]).neq("id", product_id).gt("stock", 0).limit(4)
         if prod.data.get("gender"):
             q = q.eq("gender", prod.data["gender"])
-        res = q.execute()
+        res = await run_query(q)
         data = res.data or []
         await cache_set(cache_key, data, ttl=900)
         return data
@@ -236,7 +236,7 @@ async def related_products(product_id: str):
 @router.get("/admin/all")
 async def admin_list_products(admin=Depends(require_admin)):
     try:
-        res = supabase_admin.table("products").select("*").order("created_at", desc=True).execute()
+        res = await run_query(supabase_admin.table("products").select("*").order("created_at", desc=True))
         return res.data or []
     except Exception as e:
         logger.error(f"Admin: failed to list products: {e}", exc_info=True)
@@ -263,7 +263,7 @@ async def add_product(
     admin=Depends(require_admin)
 ):
     try:
-        sk = supabase_admin.table("shopkeepers").select("id").eq("id", shopkeeper_id).single().execute()
+        sk = await run_query(supabase_admin.table("shopkeepers").select("id").eq("id", shopkeeper_id).single())
         if not sk.data:
             raise HTTPException(status_code=404, detail="Shopkeeper not found")
         shopkeeper_code = f"#{sk.data['id']:03d}"
@@ -285,10 +285,11 @@ async def add_product(
                 )
             ext = img.filename.rsplit(".", 1)[-1].lower()
             fname = f"{uuid.uuid4()}.{ext}"
-            supabase_admin.storage.from_("product-images").upload(
+            await run_blocking(
+                supabase_admin.storage.from_("product-images").upload,
                 fname, contents, {"content-type": img.content_type or "image/jpeg"}
             )
-            url = supabase_admin.storage.from_("product-images").get_public_url(fname)
+            url = await run_blocking(supabase_admin.storage.from_("product-images").get_public_url, fname)
             image_urls.append(url)
 
         # First image = primary (backward compat)
@@ -320,7 +321,7 @@ async def add_product(
             "images": image_urls,
             "size_chart": parsed_size_chart,
         }
-        res = supabase_admin.table("products").insert(product).execute()
+        res = await run_query(supabase_admin.table("products").insert(product))
         await cache_clear_pattern("products:*")
         await two_layer_clear_pattern("products:filter-options:")
         mem_clear_pattern("product:")
@@ -405,10 +406,11 @@ async def edit_product(
                 )
             ext = img.filename.rsplit(".", 1)[-1].lower()
             fname = f"{uuid.uuid4()}.{ext}"
-            supabase_admin.storage.from_("product-images").upload(
+            await run_blocking(
+                supabase_admin.storage.from_("product-images").upload,
                 fname, contents, {"content-type": img.content_type or "image/jpeg"}
             )
-            url = supabase_admin.storage.from_("product-images").get_public_url(fname)
+            url = await run_blocking(supabase_admin.storage.from_("product-images").get_public_url, fname)
             new_urls.append(url)
 
         # Merge and cap at 6
@@ -424,7 +426,7 @@ async def edit_product(
                 updates["images"] = new_urls
                 updates["image"] = new_urls[0]
 
-        res = supabase_admin.table("products").update(updates).eq("id", product_id).execute()
+        res = await run_query(supabase_admin.table("products").update(updates).eq("id", product_id))
         await cache_clear_pattern("products:*")
         await two_layer_clear_pattern("products:filter-options:")
         mem_clear_pattern("product:")
@@ -445,7 +447,7 @@ async def delete_product_image(
 ):
     """Remove a single image URL from the product's images array."""
     try:
-        res = supabase_admin.table("products").select("image,images").eq("id", product_id).single().execute()
+        res = await run_query(supabase_admin.table("products").select("image,images").eq("id", product_id).single())
         if not res.data:
             raise HTTPException(status_code=404, detail="Product not found")
 
@@ -453,10 +455,12 @@ async def delete_product_image(
         updated_images = [u for u in current_images if u != image_url]
         primary = updated_images[0] if updated_images else None
 
-        supabase_admin.table("products").update({
-            "images": updated_images,
-            "image": primary
-        }).eq("id", product_id).execute()
+        await run_query(
+            supabase_admin.table("products").update({
+                "images": updated_images,
+                "image": primary
+            }).eq("id", product_id)
+        )
 
         await cache_clear_pattern("products:*")
         mem_clear_pattern("product:")
@@ -472,8 +476,8 @@ async def delete_product_image(
 @router.delete("/admin/{product_id}")
 async def delete_product(product_id: str, admin=Depends(require_admin)):
     try:
-        prod = supabase_admin.table("products").select("name").eq("id", product_id).single().execute()
-        supabase_admin.table("products").delete().eq("id", product_id).execute()
+        prod = await run_query(supabase_admin.table("products").select("name").eq("id", product_id).single())
+        await run_query(supabase_admin.table("products").delete().eq("id", product_id))
         await cache_clear_pattern("products:*")
         await two_layer_clear_pattern("products:filter-options:")
         mem_clear_pattern("product:")
