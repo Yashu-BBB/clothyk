@@ -12,6 +12,10 @@
     .filter-bar select, .filter-bar input { padding:8px 12px; border:2px solid var(--border); border-radius:8px; font-size:0.9rem; }
     .ship-actions { display:flex; flex-direction:column; gap:4px; }
     .ship-actions .btn { white-space:nowrap; }
+    .order-code-cell { display:flex; align-items:center; gap:8px; }
+    .order-thumb { width:38px; height:38px; border-radius:6px; object-fit:cover; border:1px solid var(--border); flex-shrink:0; }
+    .order-thumb-placeholder { width:38px; height:38px; border-radius:6px; border:1px dashed var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:0.9rem; color:var(--muted); background:#FAFAFA; }
+    .pincode-tag { font-family:monospace; font-weight:700; letter-spacing:0.03em; }
   </style>
 </head>
 <body>
@@ -148,11 +152,18 @@ async function loadOrders() {
     }
     body.innerHTML = orders.map(o => `
       <tr>
-        <td style="font-family:monospace;font-size:0.75rem">${o.id.slice(0,8)}...<br><span style="color:var(--muted)">${o.shopkeeper_code||''}</span></td>
+        <td style="font-family:monospace;font-size:0.75rem">
+          <div class="order-code-cell">
+            ${o.product_image
+              ? `<img class="order-thumb" src="${o.product_image}" alt="${o.product_name || ''}">`
+              : `<span class="order-thumb-placeholder">📦</span>`}
+            <span>${o.id.slice(0,8)}...<br><span style="color:var(--muted)">${o.shopkeeper_code||''}</span></span>
+          </div>
+        </td>
         <td>
           <strong>${o.customer_name}</strong><br>
           <a href="https://wa.me/91${o.customer_phone}" target="_blank" style="color:var(--primary);font-size:0.8rem">${o.customer_phone}</a><br>
-          <span style="color:var(--muted);font-size:0.75rem">${o.customer_city}</span>
+          <span style="color:var(--muted);font-size:0.75rem">${o.customer_city} — <span class="pincode-tag">${o.customer_pincode || '—'}</span></span>
         </td>
         <td>
           <strong>${o.product_name}</strong><br>
@@ -200,8 +211,14 @@ function openUpdate(order) {
   document.getElementById("refund-status").value = "";
   document.getElementById("modal-alert").innerHTML = "";
   document.getElementById("order-info").innerHTML = `
-    <strong>${order.customer_name}</strong> — ${order.product_name}<br>
-    Size: ${order.size} · Color: ${order.color} · Amount: <strong>${formatPrice(order.our_price)}</strong>
+    <div style="display:flex;gap:10px;align-items:flex-start">
+      ${order.product_image ? `<img src="${order.product_image}" alt="${order.product_name || ''}" style="width:52px;height:52px;border-radius:8px;object-fit:cover;border:1px solid var(--border);flex-shrink:0">` : ''}
+      <div>
+        <strong>${order.customer_name}</strong> — ${order.product_name}<br>
+        Size: ${order.size} · Color: ${order.color} · Amount: <strong>${formatPrice(order.our_price)}</strong><br>
+        <span style="color:var(--muted)">Ship to pincode: <span class="pincode-tag">${order.customer_pincode || '—'}</span></span>
+      </div>
+    </div>
   `;
   toggleShippingFields();
   document.getElementById("status-modal").classList.add("open");
