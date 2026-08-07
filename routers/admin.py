@@ -143,6 +143,81 @@ async def change_password(
     return {"success": True}
 
 
+# ─── Order PDF Export ───────────────────────────────────────────────────────
+
+@router.get("/orders/{order_id}/pdf-data")
+async def order_pdf_data(order_id: str, admin=Depends(require_admin)):
+    """
+    Returns all data needed for the admin Orders page's "Download PDF"
+    button. The PDF itself is generated client-side with jsPDF — this
+    endpoint just assembles the order, product, customer, payment and
+    shipping fields it needs, grouped to match the PDF's sections.
+    """
+    try:
+        order_res = await run_query(supabase_admin.table("orders").select("*").eq("id", order_id).single())
+        order = order_res.data
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        # Category isn't denormalized onto the order row, so fetch it from
+        # the product. Best-effort — a missing/deleted product shouldn't
+        # block the PDF from generating.
+        category = None
+        if order.get("product_id"):
+            try:
+                prod_res = await run_query(
+                    supabase_admin.table("products").select("category").eq("id", order["product_id"]).maybe_single()
+                )
+                category = (prod_res.data or {}).get("category")
+            except Exception as e:
+                logger.warning(f"Could not fetch product category for order {order_id}: {e}")
+
+        delivery_fee = order.get("delivery_fee") or 0
+        amount_paid = (order.get("our_price") or 0) + delivery_fee
+
+        return {
+            "order": {
+                "id": order["id"],
+                "created_at": order.get("created_at"),
+                "status": order.get("status"),
+            },
+            "product": {
+                "image": order.get("product_image"),
+                "name": order.get("product_name"),
+                "category": category,
+                "size": order.get("size"),
+                "color": order.get("color"),
+                "shopkeeper_code": order.get("shopkeeper_code"),
+                "our_price": order.get("our_price"),
+                "profit": order.get("profit"),
+            },
+            "customer": {
+                "name": order.get("customer_name"),
+                "phone": order.get("customer_phone"),
+                "address": order.get("customer_address"),
+                "city": order.get("customer_city"),
+                "pincode": order.get("customer_pincode"),
+            },
+            "payment": {
+                "type": order.get("payment_type"),
+                "status": order.get("payment_status"),
+                "delivery_fee": delivery_fee,
+                "amount_paid": amount_paid,
+            },
+            "shipping": {
+                "courier_name": order.get("courier_name"),
+                "tracking_id": order.get("tracking_id"),
+                "awb": order.get("nimbuspost_awb"),
+                "shipment_id": order.get("nimbuspost_shipment_id"),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PDF data fetch failed for order {order_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch order data")
+
+
 # ─── NimbusPost Shipment Endpoints ─────────────────────────────────────────
 
 @router.get("/orders/{order_id}/label")

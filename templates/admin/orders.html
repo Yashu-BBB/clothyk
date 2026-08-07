@@ -16,6 +16,19 @@
     .order-thumb { width:38px; height:38px; border-radius:6px; object-fit:cover; border:1px solid var(--border); flex-shrink:0; }
     .order-thumb-placeholder { width:38px; height:38px; border-radius:6px; border:1px dashed var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:0.9rem; color:var(--muted); background:#FAFAFA; }
     .pincode-tag { font-family:monospace; font-weight:700; letter-spacing:0.03em; }
+    .btn-spinner {
+      display: inline-block;
+      width: 11px;
+      height: 11px;
+      border: 2px solid rgba(255,255,255,0.35);
+      border-top-color: #FFFFFF;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: -1px;
+      animation: btn-spin 0.7s linear infinite;
+    }
+    .btn-outline .btn-spinner { border-color: rgba(10,10,10,0.25); border-top-color: #0A0A0A; }
+    @keyframes btn-spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -136,6 +149,7 @@
 
 <div id="toast-container"></div>
 <script src="/static/js/shared.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 const STATUS_COLORS = { pending:'warning', confirmed:'primary', shipped:'primary', delivered:'success', cancelled:'danger', refunded:'muted' };
 let currentOrderId = null;
@@ -189,6 +203,7 @@ async function loadOrders() {
         <td>
           <div class="ship-actions">
             <button class="btn btn-outline btn-sm" onclick='openUpdate(${JSON.stringify(o)})'>Update</button>
+            <button class="btn btn-outline btn-sm" onclick="downloadOrderPDF('${o.id}', this)">📄 PDF</button>
             ${!o.nimbuspost_awb ? `<button class="btn btn-primary btn-sm" onclick="createShipment('${o.id}')">Create Shipment</button>` : ''}
             ${o.label_url ? `<button class="btn btn-outline btn-sm" onclick="printLabel('${o.id}')">Print Label</button>` : ''}
             ${o.nimbuspost_awb ? `<button class="btn btn-outline btn-sm" onclick="trackShipment('${o.id}')">Track</button>` : ''}
@@ -301,6 +316,250 @@ async function cancelShipment(orderId) {
   } catch(e) {
     showToast(e.message || "Failed to cancel shipment", "error");
   }
+}
+
+// ─── PDF Order Summary (jsPDF, generated client-side) ───────────────────
+
+// Loads an image URL into a base64 data URL via an off-DOM <img> + canvas.
+// Resolves to null (never rejects) on any failure — a missing/CORS-blocked
+// image should never stop the rest of the PDF from generating.
+function loadImageAsDataURL(url, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    if (!url) return resolve(null);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    let settled = false;
+    const finish = (val) => { if (!settled) { settled = true; clearTimeout(timer); resolve(val); } };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth || 400;
+        canvas.height = img.naturalHeight || 400;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        finish(canvas.toDataURL("image/jpeg", 0.9));
+      } catch (e) {
+        finish(null); // tainted canvas (no CORS header) — skip the image
+      }
+    };
+    img.onerror = () => finish(null);
+    img.src = url;
+  });
+}
+
+async function downloadOrderPDF(orderId, btnEl) {
+  const originalHTML = btnEl.innerHTML;
+  btnEl.disabled = true;
+  btnEl.innerHTML = '<span class="btn-spinner"></span>Generating...';
+  try {
+    const data = await apiFetch(`/api/admin/orders/${orderId}/pdf-data`);
+    await buildOrderPDF(data);
+  } catch (e) {
+    showToast(e.message || "Failed to generate PDF", "error");
+  } finally {
+    btnEl.disabled = false;
+    btnEl.innerHTML = originalHTML;
+  }
+}
+
+async function buildOrderPDF(data) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const pageW = 210, pageH = 297, margin = 16;
+  const BLACK = [10, 10, 10], GRAY = [107, 107, 107], LIGHT = [232, 232, 232], GREEN = [22, 163, 74];
+  let y = margin;
+
+  function checkPageBreak(needed) {
+    if (y + needed > pageH - margin) { doc.addPage(); y = margin; }
+  }
+
+  function divider() {
+    doc.setDrawColor(...LIGHT);
+    doc.setLineWidth(0.3);
+    doc.line(margin, y, pageW - margin, y);
+    y += 8;
+  }
+
+  function sectionHeading(title) {
+    checkPageBreak(14);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...BLACK);
+    doc.text(title.toUpperCase(), margin, y);
+    y += 3;
+    doc.setDrawColor(...BLACK);
+    doc.setLineWidth(0.6);
+    doc.line(margin, y, margin + 26, y);
+    y += 8;
+  }
+
+  const rupee = (n) => `Rs. ${Number(n || 0).toLocaleString("en-IN")}`;
+
+  // ── SECTION 1 — ORDER HEADER ──
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(20);
+  doc.setTextColor(...BLACK);
+  doc.text("clovical", margin, y + 4);
+
+  const orderIdShort = "#" + (data.order.id || "").slice(0, 8).toUpperCase();
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(...GRAY);
+  doc.text(orderIdShort, pageW - margin, y + 2, { align: "right" });
+
+  y += 11;
+  const orderDate = data.order.created_at
+    ? new Date(data.order.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+    : "—";
+  doc.setFontSize(9);
+  doc.setTextColor(...GRAY);
+  doc.text(`Order Date: ${orderDate}`, margin, y);
+
+  const status = (data.order.status || "—").toUpperCase();
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  const badgeW = doc.getTextWidth(status) + 8;
+  doc.setFillColor(...BLACK);
+  doc.roundedRect(pageW - margin - badgeW, y - 4.5, badgeW, 6.5, 1.5, 1.5, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.text(status, pageW - margin - badgeW / 2, y, { align: "center" });
+
+  y += 8;
+  divider();
+
+  // ── SECTION 2 — PRODUCT DETAILS ──
+  sectionHeading("Product Details");
+  const imgSize = 28;
+  let imgData = null;
+  try { imgData = await loadImageAsDataURL(data.product.image); } catch (e) {}
+
+  const textX = margin + (imgData ? imgSize + 8 : 0);
+  const textW = pageW - margin * 2 - (imgData ? imgSize + 8 : 0);
+  const imgTop = y;
+
+  if (imgData) {
+    try {
+      doc.setDrawColor(...LIGHT);
+      doc.rect(margin, y, imgSize, imgSize);
+      doc.addImage(imgData, "JPEG", margin, y, imgSize, imgSize);
+    } catch (e) { /* skip image if jsPDF rejects the data URL */ }
+  }
+
+  let py = y;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(...BLACK);
+  const nameLines = doc.splitTextToSize(data.product.name || "—", textW);
+  doc.text(nameLines, textX, py + 4);
+  py += 4 + nameLines.length * 5 + 2;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(...GRAY);
+  doc.text(`Category: ${data.product.category || "—"}`, textX, py); py += 5;
+  doc.text(`Size: ${data.product.size || "—"}    Color: ${data.product.color || "—"}`, textX, py); py += 5;
+  doc.text(`Shopkeeper Code: ${data.product.shopkeeper_code || "—"}`, textX, py); py += 5;
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...BLACK);
+  doc.text(`Our Price: ${rupee(data.product.our_price)}`, textX, py); py += 5;
+  doc.setTextColor(...GREEN);
+  doc.text(`Profit: ${rupee(data.product.profit)}`, textX, py); py += 5;
+
+  y = Math.max(imgTop + imgSize, py) + 6;
+  divider();
+
+  // ── SECTION 3 — CUSTOMER DETAILS ──
+  sectionHeading("Customer Details");
+  const c = data.customer;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(...BLACK);
+  doc.text(c.name || "—", margin, y);
+  y += 6;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.5);
+  doc.setTextColor(...GRAY);
+  doc.text(`Phone: ${c.phone || "—"}`, margin, y);
+  y += 6;
+
+  const addrLines = doc.splitTextToSize(`Address: ${c.address || "—"}`, pageW - margin * 2);
+  doc.text(addrLines, margin, y);
+  y += addrLines.length * 5 + 1;
+
+  doc.text(`City: ${c.city || "—"}     Pincode: ${c.pincode || "—"}`, margin, y);
+  y += 8;
+  divider();
+
+  // ── SECTION 4 — PAYMENT DETAILS ──
+  sectionHeading("Payment Details");
+  const p = data.payment;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.5);
+  doc.setTextColor(...GRAY);
+  doc.text(`Payment Type: ${(p.type || "—").toUpperCase()}`, margin, y); y += 6;
+  doc.text(`Payment Status: ${(p.status || "—").toUpperCase()}`, margin, y); y += 6;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(...BLACK);
+  doc.text(`Amount Paid: ${rupee(p.amount_paid)}`, margin, y);
+  y += 8;
+  divider();
+
+  // ── SECTION 5 — SHIPPING DETAILS (if available) ──
+  const s = data.shipping;
+  const hasShipping = s.courier_name || s.tracking_id || s.awb || s.shipment_id;
+  if (hasShipping) {
+    sectionHeading("Shipping Details");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor(...GRAY);
+    if (s.courier_name) { doc.text(`Courier: ${s.courier_name}`, margin, y); y += 6; }
+    if (s.tracking_id) { doc.text(`Tracking ID: ${s.tracking_id}`, margin, y); y += 6; }
+    if (s.awb) { doc.text(`AWB Number: ${s.awb}`, margin, y); y += 6; }
+    if (s.shipment_id) { doc.text(`NimbusPost Shipment ID: ${s.shipment_id}`, margin, y); y += 6; }
+    y += 2;
+    divider();
+  }
+
+  // ── SECTION 6 — PACKING CHECKLIST ──
+  checkPageBreak(85);
+  doc.setFillColor(...BLACK);
+  doc.rect(margin, y, pageW - margin * 2, 9, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(255, 255, 255);
+  doc.text("PACKING CHECKLIST", margin + 4, y + 6.2);
+  y += 16;
+
+  const checklist = [
+    "Correct product picked",
+    `Correct size: ${data.product.size || "—"}`,
+    `Correct color: ${data.product.color || "—"}`,
+    "Product packed in Clovical polybag",
+    "Thank you card included",
+    "Label stuck on package",
+    "Ready for pickup",
+  ];
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(12);
+  doc.setTextColor(...BLACK);
+  checklist.forEach((item) => {
+    checkPageBreak(11);
+    doc.setDrawColor(...BLACK);
+    doc.setLineWidth(0.5);
+    doc.rect(margin, y - 4.2, 5.5, 5.5);
+    doc.text(item, margin + 9, y);
+    y += 11;
+  });
+
+  const safeName = (data.customer.name || "customer").replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const filename = `Order-${(data.order.id || "").slice(0, 8)}-${safeName}.pdf`;
+  doc.save(filename);
 }
 
 async function logout() {
