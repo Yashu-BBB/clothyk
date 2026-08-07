@@ -43,13 +43,23 @@ NIMBUSPOST_API_KEY = os.getenv("NIMBUSPOST_API_KEY", "")
 NIMBUSPOST_EMAIL = os.getenv("NIMBUSPOST_EMAIL", "")
 NIMBUSPOST_PASSWORD = os.getenv("NIMBUSPOST_PASSWORD", "")
 
-# The verified support email NimbusPost requires on the pickup/warehouse for
-# both the warehouse-registration call AND every shipment-creation call.
+# The verified support email+phone NimbusPost requires on the pickup/warehouse
+# for both the warehouse-registration call AND every shipment-creation call.
 # NimbusPost rejects shipment creation with "Support email and phone number
 # on the shipping label must be provided and OTP-verified to proceed." if
-# this is missing from the shipment payload's pickup object — even if the
-# warehouse itself was registered with a verified email separately.
+# these aren't set to a value that's been OTP-verified as a "support
+# contact" on your NimbusPost account (NimbusPost dashboard → Settings →
+# Company Profile / KYC — look for "Support Email"/"Support Phone" and
+# verify each via the OTP they send) — this is an account-side step on
+# NimbusPost's platform, not something fixable from this code alone.
+#
+# Previously only NIMBUSPOST_SUPPORT_EMAIL existed here, and the phone sent
+# in the shipment payload was the *shopkeeper's own* contact number — but
+# NimbusPost's "Support ... must be OTP-verified" check is against your
+# platform's verified support contact, not an individual shopkeeper's
+# personal number, so that phone was never going to pass verification.
 NIMBUSPOST_SUPPORT_EMAIL = os.getenv("NIMBUSPOST_SUPPORT_EMAIL", "eclothyk@gmail.com")
+NIMBUSPOST_SUPPORT_PHONE = os.getenv("NIMBUSPOST_SUPPORT_PHONE", "")
 
 _REQUEST_TIMEOUT = 15
 
@@ -199,7 +209,13 @@ def register_pickup_address(shopkeeper: dict) -> str | None:
         "warehouse_name": f"clovical - {shopkeeper.get('shop_name', '')}",
         "name": shopkeeper.get("shopkeeper_name", ""),
         "email": NIMBUSPOST_SUPPORT_EMAIL,
-        "phone": shopkeeper.get("contact", ""),
+        # NimbusPost's OTP-verification check is against the platform's own
+        # verified support phone (NIMBUSPOST_SUPPORT_PHONE), not the
+        # shopkeeper's personal number. Fall back to the shopkeeper's
+        # contact only if no support phone is configured, so this never
+        # sends a blank phone — but expect that fallback to still fail
+        # NimbusPost's verification check the same way the email did.
+        "phone": NIMBUSPOST_SUPPORT_PHONE or shopkeeper.get("contact", ""),
         "address": shopkeeper.get("address", ""),
         "pincode": shopkeeper.get("pincode", ""),
         "city": shopkeeper.get("city", ""),
@@ -288,7 +304,9 @@ def create_shipment(order: dict, shopkeeper: dict) -> dict | None:
             "pincode": shopkeeper.get("pincode", ""),
             "city": shopkeeper.get("city", ""),
             "state": shopkeeper.get("state", ""),
-            "phone": shopkeeper.get("contact", ""),
+            # Same reasoning as register_pickup_address(): NimbusPost wants
+            # the verified support phone here, not the shopkeeper's own.
+            "phone": NIMBUSPOST_SUPPORT_PHONE or shopkeeper.get("contact", ""),
         },
         "products": [{
             "name": order.get("product_name", ""),
