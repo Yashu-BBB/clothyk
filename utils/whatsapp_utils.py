@@ -218,6 +218,23 @@ def msg_payment_confirmed(product: str, size: str, color: str, amount: float, de
         f"HELP → Show all options"
     )
 
+def msg_cod_pending(product: str, size: str, color: str, amount: float, delivery_fee: float = 0) -> str:
+    """
+    Sent immediately when a customer picks COD (replies "2"). This is NOT a
+    confirmation — the order stays in "pending" status until an admin
+    manually confirms it from the admin panel, at which point
+    msg_cod_confirmed() below is sent instead.
+    """
+    return (
+        f"🛍️ COD Order Received!\n\n"
+        f"Product: {product}\n"
+        f"Size: {size} | Color: {color}\n"
+        f"Amount: ₹{amount:.0f} (pay on delivery)\n\n"
+        f"⏳ Your order is being confirmed by our team.\n"
+        f"You will receive a confirmation message shortly.\n\n"
+        f"Reply HELP for assistance."
+    )
+
 def msg_cod_confirmed(product: str, size: str, color: str, amount: float, delivery_fee: float = 0) -> str:
     breakdown = (
         f"Item: ₹{amount - delivery_fee:.0f}\n"

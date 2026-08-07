@@ -9,7 +9,11 @@ from slowapi.util import get_remote_address
 from utils.db import supabase_admin, run_query, run_blocking
 from utils.auth_utils import require_admin
 from utils.captcha import verify_turnstile
-from utils.whatsapp_utils import send_text, send_image_url, send_file_base64, send_upi_qr, msg_order_received, msg_shipped, msg_refund_processed
+from utils.whatsapp_utils import (
+    send_text, send_image_url, send_file_base64, send_upi_qr,
+    msg_order_received, msg_shipped, msg_refund_processed,
+    msg_payment_confirmed, msg_cod_confirmed, msg_track_delivered,
+)
 from utils.nimbuspost import create_shipment
 from utils.label_generator import build_shopkeeper_package_pdf
 from utils.cache import cache_get, cache_set, cache_delete, two_layer_get, two_layer_set
@@ -508,8 +512,9 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
         delivery_fee = order.get("delivery_fee") or 0
         total_amount = order.get("total_amount") or (order["our_price"] + delivery_fee)
 
-        if update.status == "confirmed" and order.get("payment_type") == "upi" and update.payment_status == "verified":
-            from utils.whatsapp_utils import msg_payment_confirmed
+        payment_type = order.get("payment_type")
+
+        if update.status == "confirmed" and payment_type == "upi" and update.payment_status == "verified":
             await run_blocking(
                 send_text, phone,
                 msg_payment_confirmed(order["product_name"], order["size"], order["color"], total_amount, delivery_fee)
@@ -538,6 +543,23 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
                         logger.warning(f"Order {order_id} has no shopkeeper_id — skipping package PDF")
                 except Exception as e:
                     logger.warning(f"Shopkeeper package PDF failed for order {order_id}: {e}")
+
+        # COD orders are never auto-confirmed by the WhatsApp bot (see
+        # routers/whatsapp.py) — they sit in "pending" until an admin
+        # confirms them here. That confirmation is what should fire the
+        # "Order Confirmed (COD)" message; previously this branch only
+        # matched payment_type == "upi", so COD customers never got a
+        # confirmation message at all.
+        if update.status == "confirmed" and payment_type == "cod" and order.get("status") != "confirmed":
+            await run_blocking(
+                send_text, phone,
+                msg_cod_confirmed(order["product_name"], order["size"], order["color"], total_amount, delivery_fee)
+            )
+
+        # Delivered status had no WhatsApp trigger at all — admins marking an
+        # order "delivered" produced no customer-facing message.
+        if update.status == "delivered" and order.get("status") != "delivered":
+            await run_blocking(send_text, phone, msg_track_delivered())
 
         if update.refund_status == "processed":
             await run_blocking(send_text, phone, msg_refund_processed(total_amount))

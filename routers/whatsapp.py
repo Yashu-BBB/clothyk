@@ -5,7 +5,7 @@ from utils.db import supabase_admin, run_query, run_blocking
 from utils.whatsapp_utils import (
     send_text, send_upi_qr,
     msg_order_received, msg_upi_qr_followup, msg_screenshot_received,
-    msg_cod_confirmed, msg_track_confirmed, msg_track_shipped, msg_track_delivered,
+    msg_cod_pending, msg_track_confirmed, msg_track_shipped, msg_track_delivered,
     msg_cancel_confirm, msg_cancelled_upi, msg_cancelled_cod, msg_keep_order,
     msg_cannot_cancel, msg_review_request, msg_review_5star, msg_review_low,
     msg_help
@@ -220,11 +220,15 @@ async def whatsapp_webhook(request: Request):
             await run_blocking(send_text, full_phone, msg_upi_qr_followup())
             await set_agent_state(order["id"], {"awaiting": "screenshot"})
         elif body_text in ("2", "COD"):
-            await run_blocking(send_text, full_phone, msg_cod_confirmed(
+            # COD is NOT auto-confirmed. Record the chosen payment type only —
+            # the order stays "pending" until an admin manually confirms it
+            # from the admin panel, which is what actually sends the
+            # "Order Confirmed (COD)" message (see routers/orders.py).
+            await run_blocking(send_text, full_phone, msg_cod_pending(
                 order["product_name"], order["size"], order["color"],
                 order_total(order), order.get("delivery_fee") or 0
             ))
-            await run_query(supabase_admin.table("orders").update({"payment_type": "cod", "status": "confirmed"}).eq("id", order["id"]))
+            await run_query(supabase_admin.table("orders").update({"payment_type": "cod"}).eq("id", order["id"]))
             await set_agent_state(order["id"], {})
         else:
             await run_blocking(send_text, full_phone, "Please reply:\n1️⃣ for UPI\n2️⃣ for Cash on Delivery")
