@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from utils.auth_utils import get_admin_from_request
+from utils.nimbuspost import is_configured as nimbuspost_is_configured
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -74,7 +75,7 @@ async def admin_shopkeepers(request: Request):
 async def admin_orders(request: Request):
     if not get_admin_from_request(request):
         return RedirectResponse("/admin/login")
-    return render("admin/orders.html", request)
+    return render("admin/orders.html", request, nimbuspost_configured=nimbuspost_is_configured())
 
 @router.get("/admin/analytics", response_class=HTMLResponse)
 async def admin_analytics(request: Request):

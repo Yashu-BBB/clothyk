@@ -151,6 +151,9 @@
 <script src="/static/js/shared.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
+// Rendered server-side (routers/public.py) from the same env-var check the
+// backend /ship endpoint uses — no extra fetch needed to know this up front.
+const NIMBUSPOST_CONFIGURED = {{ 'true' if nimbuspost_configured else 'false' }};
 const STATUS_COLORS = { pending:'warning', confirmed:'primary', shipped:'primary', delivered:'success', cancelled:'danger', refunded:'muted' };
 let currentOrderId = null;
 
@@ -204,7 +207,12 @@ async function loadOrders() {
           <div class="ship-actions">
             <button class="btn btn-outline btn-sm" onclick='openUpdate(${JSON.stringify(o)})'>Update</button>
             <button class="btn btn-outline btn-sm" onclick="downloadOrderPDF('${o.id}', this)">📄 PDF</button>
-            ${!o.nimbuspost_awb ? `<button class="btn btn-primary btn-sm" onclick="createShipment('${o.id}')">Create Shipment</button>` : ''}
+            ${!o.nimbuspost_awb
+              ? (NIMBUSPOST_CONFIGURED
+                  ? `<button class="btn btn-primary btn-sm" onclick="createShipment('${o.id}')">Create Shipment</button>`
+                  : `<button class="btn btn-outline btn-sm" disabled title="NimbusPost not configured yet">Create Shipment</button>`)
+              : ''}
+            ${o.nimbuspost_awb && !o.label_url ? `<button class="btn btn-outline btn-sm" disabled title="Label not available">Print Label</button>` : ''}
             ${o.label_url ? `<button class="btn btn-outline btn-sm" onclick="printLabel('${o.id}')">Print Label</button>` : ''}
             ${o.nimbuspost_awb ? `<button class="btn btn-outline btn-sm" onclick="trackShipment('${o.id}')">Track</button>` : ''}
             ${o.nimbuspost_awb ? `<button class="btn btn-danger btn-sm" onclick="cancelShipment('${o.id}')">Cancel Shipment</button>` : ''}

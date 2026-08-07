@@ -8,7 +8,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from utils.db import supabase_admin, run_query, run_blocking
 from utils.auth_utils import get_admin_from_request, require_admin, hash_password
-from utils.nimbuspost import track_shipment, cancel_shipment, get_couriers
+from utils.nimbuspost import track_shipment, cancel_shipment, get_couriers, is_configured as nimbuspost_is_configured
 from utils.cache import (
     cache_get, cache_set, cache_delete, two_layer_get, two_layer_set,
     two_layer_clear_pattern, mem_delete,
@@ -257,8 +257,7 @@ async def ship_order(order_id: str, admin=Depends(require_admin)):
         if order.get("nimbuspost_awb"):
             raise HTTPException(status_code=400, detail="Shipment already created for this order")
 
-        import os
-        if not (os.getenv("NIMBUSPOST_API_KEY") or (os.getenv("NIMBUSPOST_EMAIL") and os.getenv("NIMBUSPOST_PASSWORD"))):
+        if not nimbuspost_is_configured():
             raise HTTPException(status_code=400, detail="NimbusPost not configured")
 
         result = await create_shipment_for_order(order)

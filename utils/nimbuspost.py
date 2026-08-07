@@ -73,6 +73,24 @@ def _is_configured() -> bool:
     return _bearer_configured() or _static_configured()
 
 
+def is_configured() -> bool:
+    """
+    Public helper: True if NimbusPost has at least one auth method set up.
+    Use this (instead of re-checking os.getenv(...) elsewhere) anywhere
+    that needs to know whether to attempt a NimbusPost call at all —
+    e.g. the admin "Create Shipment" endpoint and the Orders page's
+    server-rendered button state. Logs a warning when not configured so
+    it's obvious in the logs why shipment actions are being skipped.
+    """
+    if not _is_configured():
+        logger.warning(
+            "NimbusPost not configured — set NIMBUSPOST_API_KEY and/or "
+            "NIMBUSPOST_EMAIL + NIMBUSPOST_PASSWORD to enable shipping"
+        )
+        return False
+    return True
+
+
 def get_auth_token() -> str | None:
     """
     Returns a valid NimbusPost Bearer token for shipment/tracking/courier
