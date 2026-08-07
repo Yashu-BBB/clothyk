@@ -450,3 +450,21 @@ async def public_settings():
     except Exception as e:
         logger.error(f"Failed to fetch public settings: {e}", exc_info=True)
         return {"girls_section_enabled": "false", "delivery_fee": "0"}
+
+@router.get("/active-visitors")
+async def active_visitors(admin=Depends(require_admin)):
+    """Returns count of visitors active in last 5 minutes."""
+    from datetime import datetime, timezone
+    try:
+        from utils.cache import redis_client
+        if redis_client:
+            keys = await redis_client.keys("active_visitor:*")
+            return {
+                "count": len(keys),
+                "window": "5 minutes",
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+        return {"count": 0, "window": "5 minutes", "error": "Redis not available"}
+    except Exception as e:
+        logger.error(f"Active visitors check failed: {e}", exc_info=True)
+        return {"count": 0, "window": "5 minutes", "error": str(e)}

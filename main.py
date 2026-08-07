@@ -157,6 +157,16 @@ async def track_and_protect(request: Request, call_next):
                 pass
         asyncio.create_task(_log_visitor())
 
+        async def _track_active():
+            try:
+                from utils.cache import redis_client
+                if redis_client:
+                    active_key = f"active_visitor:{ip_hash}"
+                    await redis_client.setex(active_key, 300, "1")
+            except Exception:
+                pass  # Never break main flow
+        asyncio.create_task(_track_active())
+
     start = time.time()
     response = await call_next(request)
     duration = time.time() - start
