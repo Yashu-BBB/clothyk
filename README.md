@@ -1,1 +1,1 @@
-A Online Clothing store where we connect local dress shops and boutique just like swiggy.
+A Online Clothing store where we connect local dress shops and boutique just like swiggy
