@@ -24,13 +24,15 @@ WA_NUMBER = __import__("os").getenv("WHATSAPP_NUMBER", "")
 class OrderRequest(BaseModel):
     customer_name: str = Field(..., max_length=200)
     customer_phone: str = Field(..., max_length=10, min_length=10)
-    customer_address: str = Field(..., max_length=500)
+    address_line1: str = Field(..., max_length=200)
+    address_line2: str = Field("", max_length=200)
+    customer_address: str = Field("", max_length=500)
     customer_city: str = Field(..., max_length=100)
     customer_pincode: str = Field(..., max_length=6, min_length=6)
     product_id: str = Field(..., max_length=36)
     size: str = Field(..., max_length=50)
     color: str = Field(..., max_length=100)
-    captcha_token: str = Field(..., max_length=2000)
+    captcha_token: str = Field("", max_length=2000)
 
 
 class StatusUpdate(BaseModel):
@@ -303,9 +305,26 @@ async def create_shipment_for_order(order: dict) -> dict | None:
 async def create_order(order: OrderRequest, request: Request):
     client_ip = request.headers.get("CF-Connecting-IP") or request.client.host
 
-    # Verify captcha
+    # Verify captcha — hard block, never create an order without it.
+    # Missing/empty token and a failed Turnstile check are surfaced with
+    # distinct messages so the frontend can tell the customer what to do.
+    if not order.captcha_token:
+        raise HTTPException(status_code=400, detail="Human verification required. Please refresh and try again.")
     if not verify_turnstile(order.captcha_token, client_ip):
-        raise HTTPException(status_code=400, detail="Captcha verification failed")
+        raise HTTPException(status_code=400, detail="Human verification failed. Please try again.")
+
+    # Address Line 1 is required; Address Line 2 is optional. Combine them
+    # into the single customer_address field the rest of the order flow
+    # (DB row, WhatsApp notification, etc.) already expects. Re-derived
+    # here rather than trusting the frontend's combined value, since
+    # frontend validation can be bypassed.
+    address_line1 = order.address_line1.strip()
+    address_line2 = order.address_line2.strip()
+    if not address_line1:
+        raise HTTPException(status_code=400, detail="Address Line 1 is required")
+    order.address_line1 = address_line1
+    order.address_line2 = address_line2
+    order.customer_address = f"{address_line1}, {address_line2}".strip(", ")
 
     # Phone number validation (frontend validation can be bypassed)
     phone = order.customer_phone.strip().replace(" ", "").replace("-", "")

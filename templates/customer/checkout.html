@@ -357,11 +357,21 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label">Complete Address *</label>
-          <textarea class="form-control" id="customer_address" rows="3"
-            placeholder="House/Flat No., Street, Area, Landmark"
-            autocomplete="street-address"></textarea>
-          <div class="form-error" id="err-address"></div>
+          <label class="form-label">Address Line 1 *</label>
+          <input class="form-control" id="address_line1"
+            placeholder="House/Flat No., Building Name, Street Name"
+            maxlength="200"
+            autocomplete="address-line1">
+          <div class="form-error" id="err-address1"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Address Line 2 (Optional)</label>
+          <input class="form-control" id="address_line2"
+            placeholder="Area, Landmark, Locality (Optional)"
+            maxlength="200"
+            autocomplete="address-line2">
+          <div class="form-error" id="err-address2"></div>
         </div>
 
         <div class="form-group">
@@ -393,10 +403,17 @@
 
         <!-- Turnstile CAPTCHA -->
         <div class="captcha-wrap">
-          <div class="cf-turnstile" data-sitekey="0x4AAAAAADrUAQmH1f5HqXtJ" id="turnstile-widget"></div>
+          <div class="cf-turnstile"
+            data-sitekey="0x4AAAAAADrUAQmH1f5HqXtJ"
+            id="turnstile-widget"
+            data-callback="onTurnstileSuccess"
+            data-error-callback="onTurnstileError"
+            data-expired-callback="onTurnstileExpired"
+            data-timeout-callback="onTurnstileExpired"></div>
+          <div class="form-error" id="err-turnstile" style="margin-top:8px;display:none"></div>
         </div>
 
-        <button class="btn btn-whatsapp btn-block btn-xl" onclick="placeOrder()" id="order-btn">
+        <button class="btn btn-whatsapp btn-block btn-xl" onclick="placeOrder()" id="order-btn" disabled>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0">
             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
           </svg>
@@ -482,12 +499,16 @@
 
     function validate() {
       let ok = true;
-      const name    = document.getElementById("customer_name").value.trim();
-      const phone   = document.getElementById("customer_phone").value.trim();
-      const address = document.getElementById("customer_address").value.trim();
-      const city    = document.getElementById("customer_city").value.trim();
+      const name         = document.getElementById("customer_name").value.trim();
+      const phone        = document.getElementById("customer_phone").value.trim();
+      const addressLine1 = document.getElementById("address_line1").value.trim();
+      const addressLine2 = document.getElementById("address_line2").value.trim();
+      const city         = document.getElementById("customer_city").value.trim();
 
-      document.querySelectorAll(".form-error").forEach(e => e.textContent = "");
+      // Only clear the field-level errors here — the Turnstile error is
+      // managed separately by the widget callbacks so it isn't wiped out
+      // (or hidden) by every validate() pass.
+      document.querySelectorAll(".form-error").forEach(e => { if (e.id !== "err-turnstile") e.textContent = ""; });
       document.querySelectorAll(".form-control").forEach(e => e.classList.remove("error"));
 
       if (!name) {
@@ -500,9 +521,18 @@
         document.getElementById("err-phone").textContent = "Enter a valid 10-digit number";
         ok = false;
       }
-      if (!address || address.length < 10) {
-        document.getElementById("customer_address").classList.add("error");
-        document.getElementById("err-address").textContent = "Please enter your complete address";
+      if (!addressLine1) {
+        document.getElementById("address_line1").classList.add("error");
+        document.getElementById("err-address1").textContent = "Address Line 1 is required";
+        ok = false;
+      } else if (addressLine1.length > 200) {
+        document.getElementById("address_line1").classList.add("error");
+        document.getElementById("err-address1").textContent = "Address Line 1 must be under 200 characters";
+        ok = false;
+      }
+      if (addressLine2.length > 200) {
+        document.getElementById("address_line2").classList.add("error");
+        document.getElementById("err-address2").textContent = "Address Line 2 must be under 200 characters";
         ok = false;
       }
       if (!city) {
@@ -516,32 +546,84 @@
         document.getElementById("err-pincode").textContent = "Enter a valid 6-digit Indian pincode";
         ok = false;
       }
+      if (!turnstileVerified) {
+        document.getElementById("err-turnstile").textContent = "Please complete the human verification above";
+        document.getElementById("err-turnstile").style.display = "block";
+        ok = false;
+      }
       return ok;
     }
 
+    // ─── Turnstile state ────────────────────────────────────────────────
+    // The "Place Order" button starts disabled (see the button markup) and
+    // only becomes clickable once Turnstile hands back a success token.
+    // Any error/expiry immediately re-disables it — this is a hard block,
+    // mirrored by the backend refusing to create an order without a valid
+    // token, so neither side can be bypassed on its own.
+    let turnstileVerified = false;
+    let turnstileToken = "";
+
+    function updateOrderButtonState() {
+      const btn = document.getElementById("order-btn");
+      btn.disabled = !turnstileVerified;
+    }
+
+    function onTurnstileSuccess(token) {
+      turnstileVerified = true;
+      turnstileToken = token || "";
+      document.getElementById("err-turnstile").style.display = "none";
+      updateOrderButtonState();
+    }
+
+    function onTurnstileError() {
+      turnstileVerified = false;
+      turnstileToken = "";
+      document.getElementById("err-turnstile").textContent = "Please complete the human verification above";
+      document.getElementById("err-turnstile").style.display = "block";
+      updateOrderButtonState();
+    }
+
+    function onTurnstileExpired() {
+      turnstileVerified = false;
+      turnstileToken = "";
+      document.getElementById("err-turnstile").textContent = "Verification expired — please try again";
+      document.getElementById("err-turnstile").style.display = "block";
+      updateOrderButtonState();
+    }
+
     async function placeOrder() {
+      // Hard block — never proceed without a verified Turnstile token,
+      // regardless of how this function was invoked.
+      if (!turnstileVerified || !turnstileToken) {
+        onTurnstileError();
+        return;
+      }
       if (!validate()) return;
 
       const items = Cart.get();
       if (!items.length) { showToast("Cart is empty", "error"); return; }
 
-      const captchaToken = document.querySelector('[name=cf-turnstile-response]')?.value || "";
-
       const btn = document.getElementById("order-btn");
       btn.disabled = true;
       btn.innerHTML = `<span style="opacity:0.6">Placing order…</span>`;
+
+      const addressLine1 = document.getElementById("address_line1").value.trim();
+      const addressLine2 = document.getElementById("address_line2").value.trim();
+      const combinedAddress = addressLine2 ? `${addressLine1}, ${addressLine2}` : addressLine1;
 
       const item = items[0];
       const orderData = {
         customer_name:    document.getElementById("customer_name").value.trim(),
         customer_phone:   document.getElementById("customer_phone").value.trim(),
-        customer_address: document.getElementById("customer_address").value.trim(),
+        address_line1:    addressLine1,
+        address_line2:    addressLine2,
+        customer_address: combinedAddress,
         customer_city:    document.getElementById("customer_city").value.trim(),
         customer_pincode: document.getElementById("customer_pincode").value.trim(),
         product_id:       item.id,
         size:             item.size,
         color:            item.color,
-        captcha_token:    captchaToken
+        captcha_token:    turnstileToken
       };
 
       try {
@@ -561,12 +643,26 @@
         setTimeout(() => { window.location = "/"; }, 2400);
       } catch(e) {
         showToast(e.message || "Failed to place order", "error");
-        btn.disabled = false;
+
+        // Turnstile tokens are single-use — whether this failed because of
+        // a captcha rejection or any other server error, the token we sent
+        // is now spent. Reset the widget so the button stays hard-blocked
+        // until the customer completes verification again.
+        turnstileVerified = false;
+        turnstileToken = "";
+        if (window.turnstile && document.getElementById("turnstile-widget")) {
+          try { window.turnstile.reset("#turnstile-widget"); } catch (resetErr) {}
+        }
+
         btn.innerHTML = `
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0">
             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
           </svg>
           Place Order via WhatsApp`;
+
+        document.getElementById("err-turnstile").textContent = "Please complete the human verification above";
+        document.getElementById("err-turnstile").style.display = "block";
+        updateOrderButtonState();
       }
     }
 
