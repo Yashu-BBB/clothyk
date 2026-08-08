@@ -12,7 +12,7 @@ from utils.db import supabase_admin, run_query, run_blocking
 from utils.auth_utils import require_admin
 from utils.captcha import verify_turnstile
 from utils.whatsapp_utils import (
-    send_text, send_image_url, send_file_base64, send_upi_qr,
+    send_text, send_image_url, send_upi_qr,
     msg_order_received, msg_shipped, msg_refund_processed,
     msg_payment_confirmed, msg_cod_confirmed, msg_track_delivered,
 )
