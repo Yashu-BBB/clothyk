@@ -714,21 +714,42 @@ function updateDiscountPreview() {
 }
 
 // ─── GENDER ────────────────────────────────────────────────────────────────
-function selectGender(gender) {
+// `skipCategoryReload` lets a caller that's about to load the category
+// dropdown itself (with the correct pre-selected value, e.g. openEdit)
+// skip the automatic reload below — see loadCategoryDropdown's comment for
+// why firing two requests here was actually corrupting saved categories.
+function selectGender(gender, skipCategoryReload = false) {
   document.getElementById('gender-val').value = gender;
   const girlsOpt = document.getElementById('opt-Girls');
   const boysOpt = document.getElementById('opt-Boys');
   girlsOpt.className = 'gender-opt' + (gender === 'Girls' ? ' selected-girls' : '');
   boysOpt.className = 'gender-opt' + (gender === 'Boys' ? ' selected-boys' : '');
-  loadCategoryDropdown(gender);
+  if (!skipCategoryReload) loadCategoryDropdown(gender);
 }
 
 // ─── CATEGORY DROPDOWN ─────────────────────────────────────────────────────
+// BUGFIX: this used to get called twice in quick succession when editing a
+// product — once from selectGender() with no pre-selected value, and once
+// again right after with the product's actual category. Both requests hit
+// the same endpoint and neither was awaited, so whichever response came
+// back *last* silently won and overwrote the dropdown — most of the time
+// that was the correct (second) call, but occasionally normal network
+// jitter meant the first (blank) call resolved last instead, silently
+// resetting the category to blank before the admin ever clicked Save.
+// That's what caused products to randomly save with no/blank category.
+//
+// `categoryLoadToken` fixes this for good: every call gets a ticket number,
+// and a response is only applied to the dropdown if its ticket is still the
+// most recent one issued. Any older, now-stale response is discarded no
+// matter what order the network delivers it in.
+let categoryLoadToken = 0;
 async function loadCategoryDropdown(gender, currentVal = '') {
   const sel = document.getElementById('category-select');
+  const myToken = ++categoryLoadToken;
   sel.innerHTML = '<option value="">Loading...</option>';
   try {
     const cats = await apiFetch(`/api/categories/?gender=${gender}`);
+    if (myToken !== categoryLoadToken) return; // a newer request has since started — ignore this stale response
     sel.innerHTML = '<option value="">Select category...</option>';
     cats.forEach(c => {
       const opt = document.createElement('option');
@@ -738,6 +759,7 @@ async function loadCategoryDropdown(gender, currentVal = '') {
       sel.appendChild(opt);
     });
   } catch(e) {
+    if (myToken !== categoryLoadToken) return;
     sel.innerHTML = '<option value="">Failed to load</option>';
   }
 }
@@ -822,11 +844,14 @@ function openEdit(p) {
   form.stock.value = p.stock;
   document.getElementById("featured-cb").checked = p.featured;
 
-  // Gender
+  // Gender — skip selectGender's own auto-reload (true) since we load the
+  // category dropdown ourselves right below with the product's actual
+  // category pre-selected. Only one request now, so there's nothing left
+  // to race against.
   const gender = p.gender || 'Girls';
-  selectGender(gender);
+  selectGender(gender, true);
 
-  // Category — set after dropdown loads
+  // Category
   loadCategoryDropdown(gender, p.category);
 
   // Sizes — detect preset type

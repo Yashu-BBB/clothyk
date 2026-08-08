@@ -363,7 +363,13 @@ async def edit_product(
         if shopkeeper_price is not None: updates["shopkeeper_price"] = shopkeeper_price
         if sizes is not None: updates["sizes"] = json.loads(sizes)
         if colors is not None: updates["colors"] = json.loads(colors)
-        if category is not None: updates["category"] = category
+        # Safety net: category is required in the admin UI, so a blank value
+        # here almost certainly means a frontend glitch (e.g. a dropdown
+        # that hadn't finished loading yet) rather than an intentional
+        # "clear the category" action — never let that silently wipe out a
+        # product's existing category.
+        if category is not None and category.strip():
+            updates["category"] = category
         if gender is not None: updates["gender"] = gender
         if mrp is not None: updates["mrp"] = mrp if mrp > 0 else None
         if featured is not None: updates["featured"] = featured
