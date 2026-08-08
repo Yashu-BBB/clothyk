@@ -573,6 +573,28 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
                 msg_cod_confirmed(order["product_name"], order["size"], order["color"], total_amount, delivery_fee)
             )
 
+            # Same as the UPI branch above: build the shopkeeper's package PDF
+            # now if auto-ship won't do it later. Previously this was missing
+            # entirely for COD, so COD orders never got a package PDF unless
+            # auto-ship happened to also be on with payment_status="verified".
+            if not await _is_auto_ship_enabled():
+                try:
+                    shopkeeper_id = order.get("shopkeeper_id")
+                    if shopkeeper_id:
+                        sk_res = await run_query(supabase_admin.table("shopkeepers").select("*").eq("id", shopkeeper_id).single())
+                        shopkeeper = sk_res.data
+                        if shopkeeper:
+                            _fire_and_forget(
+                                _generate_shopkeeper_package_pdf(order, shopkeeper, None),
+                                f"package PDF for order {order_id} (manual confirm, COD, auto-ship off)",
+                            )
+                        else:
+                            logger.warning(f"Shopkeeper {shopkeeper_id} not found — skipping package PDF")
+                    else:
+                        logger.warning(f"Order {order_id} has no shopkeeper_id — skipping package PDF")
+                except Exception as e:
+                    logger.warning(f"Shopkeeper package PDF failed for order {order_id}: {e}")
+
         # Delivered status had no WhatsApp trigger at all — admins marking an
         # order "delivered" produced no customer-facing message.
         if update.status == "delivered" and order.get("status") != "delivered":
