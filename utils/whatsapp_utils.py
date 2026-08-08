@@ -356,6 +356,12 @@ def msg_refund_processed(amount: float) -> str:
         f"Thank you for your patience"
     )
 
+def msg_no_shopkeeper_orders() -> str:
+    return "No orders found. 📭\nYou'll be notified here as soon as a new order comes in."
+
+def msg_shopkeeper_pdf_caption(product: str) -> str:
+    return f"📦 Order — {product}\nPhoto on page 1, shipping details on page 2. Print double-sided and attach to the package."
+
 def msg_help() -> str:
     return (
         "Hi! Here's what I can help with 😊\n\n"

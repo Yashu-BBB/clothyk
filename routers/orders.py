@@ -1,7 +1,9 @@
 import re
 import asyncio
+import base64
 import logging
 import requests
+from datetime import datetime, timezone
 from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel, Field
 from slowapi import Limiter
@@ -90,10 +92,14 @@ async def public_delivery_fee():
 
 async def _mark_package_pdf_status(order_id: str, status: str):
     """
-    Records whether the shopkeeper package PDF (photo + label) actually made
-    it out over WhatsApp. `status` is 'sent' or 'failed'. This is what lets
-    admins see (and manually resend) orders where the shopkeeper never got
-    their packing PDF, instead of that failure only existing in a log line.
+    Records the shopkeeper package PDF's state on the order. `status` is one
+    of:
+      'ready'  — PDF built and stored, waiting for the shopkeeper to request it
+      'sent'   — delivered to the shopkeeper over WhatsApp
+      'failed' — PDF generation itself failed (not a send failure — we no
+                 longer send automatically, see _generate_shopkeeper_package_pdf)
+    This is what lets admins see (and manually regenerate) orders where the
+    PDF never got built, instead of that failure only existing in a log line.
     """
     try:
         await run_query(
@@ -103,49 +109,58 @@ async def _mark_package_pdf_status(order_id: str, status: str):
         logger.error(f"Failed to record package_pdf_status={status} for order {order_id}: {e}", exc_info=True)
 
 
-async def _send_shopkeeper_package_pdf(order: dict, shopkeeper: dict, nimbuspost_label_bytes: bytes | None):
+async def _generate_shopkeeper_package_pdf(order: dict, shopkeeper: dict, nimbuspost_label_bytes: bytes | None):
     """
     Builds the 2-page shopkeeper PDF (product photo + either NimbusPost's
-    untouched label or our own fallback slip) and sends it via WhatsApp.
-    Never raises — a notification failure must never block order/shipment
-    processing. The PDF build (reportlab/pypdf + an image fetch) and the
-    WhatsApp send are both blocking work, so both run off the event loop.
+    untouched label or our own fallback slip) and STORES it on the order —
+    it does NOT send it over WhatsApp.
 
-    utils.whatsapp_utils.send_file_base64 already retries transient network
-    failures internally; if it still fails after those retries, we record
-    that on the order so it shows up for admins to manually resend rather
-    than silently vanishing.
+    Why: this used to push the PDF to the shopkeeper's WhatsApp the instant
+    an order was confirmed/shipped. That's a business-initiated message the
+    shopkeeper never asked for in that moment, and doing it automatically on
+    every single order is exactly the pattern WhatsApp's spam heuristics
+    flag — which is what got the number temporarily restricted. Automatic
+    pushes are gone for good now.
+
+    Instead, the PDF sits here (base64, package_pdf_status='ready') until
+    the shopkeeper's own registered WhatsApp number messages the bot asking
+    for their orders. That delivery — a reply to an incoming message, not a
+    cold push — is handled by handle_shopkeeper_order_pull() in
+    routers/whatsapp.py, and is the ONLY place a package PDF is ever sent.
+
+    Never raises — a PDF-generation failure must never block order/shipment
+    processing. Building (reportlab/pypdf + an image fetch) is blocking
+    work, so it runs off the event loop.
     """
     order_id = order.get("id")
     try:
-        contact = shopkeeper.get("contact") if shopkeeper else None
-        if not contact:
-            logger.warning(f"Shopkeeper has no contact number — skipping package PDF for order {order_id}")
-            await _mark_package_pdf_status(order_id, "failed")
-            return
         pdf_bytes = await run_blocking(build_shopkeeper_package_pdf, order, shopkeeper, nimbuspost_label_bytes)
-        ok = await run_blocking(
-            send_file_base64, contact, pdf_bytes,
-            filename=f"order_{str(order_id)[:8]}.pdf",
-            caption="📦 New order — photo on page 1, shipping details on page 2. Print double-sided and attach to the package."
+        b64 = base64.b64encode(pdf_bytes).decode()
+        await run_query(
+            supabase_admin.table("orders").update({
+                "package_pdf_status": "ready",
+                "package_pdf_base64": b64,
+                "package_pdf_filename": f"order_{str(order_id)[:8]}.pdf",
+                "package_pdf_generated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", order_id)
         )
-        await _mark_package_pdf_status(order_id, "sent" if ok else "failed")
+        logger.info(f"Package PDF generated & queued for shopkeeper pickup: order {order_id}")
     except Exception as e:
-        logger.warning(f"Shopkeeper package PDF failed for order {order_id}: {e}")
+        logger.warning(f"Shopkeeper package PDF generation failed for order {order_id}: {e}")
         await _mark_package_pdf_status(order_id, "failed")
 
 
 def _fire_and_forget(coro, description: str):
     """
     Schedules `coro` to run without the caller waiting on it. Used for the
-    shopkeeper package-PDF send, which can take 20+ seconds when WPPConnect
-    is unreachable or retrying — previously this was awaited inline, which
-    made the admin's /ship request (and NimbusPost's own failure path) hang
-    for that whole duration and often return a 502 that had nothing to do
-    with the shipment itself. _send_shopkeeper_package_pdf already never
-    raises and records its own success/failure on the order, so there's
-    nothing useful for the caller to await here — but we still attach a
-    done-callback to log anything unexpected instead of losing it silently.
+    shopkeeper package-PDF generation, which involves an image fetch + PDF
+    render and can take a few seconds — previously this was awaited inline,
+    which made the admin's /ship request (and NimbusPost's own failure path)
+    hang for that whole duration. _generate_shopkeeper_package_pdf already
+    never raises and records its own success/failure on the order, so
+    there's nothing useful for the caller to await here — but we still
+    attach a done-callback to log anything unexpected instead of losing it
+    silently.
     """
     task = asyncio.create_task(coro)
 
@@ -236,13 +251,13 @@ async def create_shipment_for_order(order: dict) -> dict | None:
         if not shopkeeper or not shopkeeper.get("address"):
             logger.warning(f"Shopkeeper {shopkeeper_id} has no registered address — cannot create shipment for order {order_id}")
             await _release_shipment_claim(order_id, "failed")
-            # No NimbusPost label possible without an address — send the
-            # fallback package PDF instead, so the shopkeeper still gets
-            # the photo + order details to work from. Fire-and-forget so
-            # a slow/unreachable WhatsApp bridge doesn't hold up the caller.
+            # No NimbusPost label possible without an address — build the
+            # fallback package PDF instead, so the shopkeeper still has the
+            # photo + order details ready to pull whenever they ask for it.
+            # Fire-and-forget so a slow image fetch doesn't hold up the caller.
             if shopkeeper:
                 _fire_and_forget(
-                    _send_shopkeeper_package_pdf(order, shopkeeper, None),
+                    _generate_shopkeeper_package_pdf(order, shopkeeper, None),
                     f"package PDF for order {order_id} (no shopkeeper address)",
                 )
             return None
@@ -251,7 +266,7 @@ async def create_shipment_for_order(order: dict) -> dict | None:
         if not result:
             await _release_shipment_claim(order_id, "failed")
             _fire_and_forget(
-                _send_shopkeeper_package_pdf(order, shopkeeper, None),
+                _generate_shopkeeper_package_pdf(order, shopkeeper, None),
                 f"package PDF for order {order_id} (NimbusPost shipment failed)",
             )
             return None
@@ -284,7 +299,8 @@ async def create_shipment_for_order(order: dict) -> dict | None:
 
             # Fetch NimbusPost's own official label and merge it (untouched —
             # never edited, so the barcode/AWB stays valid) with our product
-            # photo page, then send the combined PDF to the shopkeeper.
+            # photo page, then build+store the combined PDF for the
+            # shopkeeper to pull later — not send it now.
             label_bytes = None
             if result.get("label_url"):
                 try:
@@ -293,7 +309,7 @@ async def create_shipment_for_order(order: dict) -> dict | None:
                     label_bytes = label_resp.content
                 except Exception as e:
                     logger.warning(f"Could not fetch NimbusPost label PDF for order {order_id}: {e}")
-            await _send_shopkeeper_package_pdf(order, shopkeeper, label_bytes)
+            await _generate_shopkeeper_package_pdf(order, shopkeeper, label_bytes)
 
         _fire_and_forget(_notify_and_send_package_pdf(), f"post-shipment notifications for order {order_id}")
 
@@ -520,12 +536,13 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
                 msg_payment_confirmed(order["product_name"], order["size"], order["color"], total_amount, delivery_fee)
             )
 
-            # Send the shopkeeper their package PDF (product photo + either
-            # NimbusPost's label or our fallback slip). If auto-ship is on,
-            # create_shipment_for_order() below decides success/failure and
-            # sends it exactly once from there — sending it here too would
+            # Build the shopkeeper's package PDF (product photo + either
+            # NimbusPost's label or our fallback slip) and store it, ready
+            # for the shopkeeper to pull — never sent automatically. If
+            # auto-ship is on, create_shipment_for_order() below generates
+            # it exactly once from there instead — doing it here too would
             # duplicate it. If auto-ship is off, no shipment will ever be
-            # attempted automatically, so send the fallback version now.
+            # attempted automatically, so generate the fallback version now.
             if not await _is_auto_ship_enabled():
                 try:
                     shopkeeper_id = order.get("shopkeeper_id")
@@ -534,7 +551,7 @@ async def update_order(order_id: str, update: StatusUpdate, admin=Depends(requir
                         shopkeeper = sk_res.data
                         if shopkeeper:
                             _fire_and_forget(
-                                _send_shopkeeper_package_pdf(order, shopkeeper, None),
+                                _generate_shopkeeper_package_pdf(order, shopkeeper, None),
                                 f"package PDF for order {order_id} (manual confirm, auto-ship off)",
                             )
                         else:

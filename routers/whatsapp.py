@@ -1,14 +1,15 @@
+import base64
 import logging
 import os
 from fastapi import APIRouter, Request, HTTPException
 from utils.db import supabase_admin, run_query, run_blocking
 from utils.whatsapp_utils import (
-    send_text, send_upi_qr,
+    send_text, send_upi_qr, send_file_base64,
     msg_order_received, msg_upi_qr_followup, msg_screenshot_received,
     msg_cod_pending, msg_track_confirmed, msg_track_shipped, msg_track_delivered,
     msg_cancel_confirm, msg_cancelled_upi, msg_cancelled_cod, msg_keep_order,
     msg_cannot_cancel, msg_review_request, msg_review_5star, msg_review_low,
-    msg_help
+    msg_help, msg_no_shopkeeper_orders, msg_shopkeeper_pdf_caption,
 )
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,12 @@ router = APIRouter()
 # Shared secret the WPPConnect server sends back with each webhook call,
 # so we can verify it's really our own server forwarding the message.
 WPP_API_KEY = os.getenv("WPP_API_KEY", "")
+
+# Keywords a shopkeeper can send to pull any packing PDFs waiting for them.
+# Matched only after the sender's number is confirmed to be a registered
+# shopkeeper contact (see find_shopkeeper_by_phone) — a random number
+# sending "ORDER" never triggers this.
+SHOPKEEPER_PULL_KEYWORDS = {"ORDER", "ORDERS", "MY ORDERS", "MYORDERS", "PICKUP"}
 
 
 def order_total(order: dict) -> float:
@@ -50,6 +57,85 @@ async def get_latest_order(phone: str):
     except Exception as e:
         logger.error(f"Failed to fetch order for {phone}: {e}", exc_info=True)
         return None
+
+
+async def find_shopkeeper_by_phone(phone: str) -> dict | None:
+    """
+    Looks up a shopkeeper whose registered `contact` number matches the
+    sender. `phone` is already normalized to bare 10 digits (see
+    normalize_phone). `contact` is admin-entered free text and may be
+    stored with/without +91, spaces, etc., so normalize both sides before
+    comparing rather than relying on an exact DB match.
+
+    This is the gate that keeps the package-PDF pull feature safe: a
+    random number can never trigger it, only a number an admin has
+    explicitly registered against a shopkeeper in the admin panel.
+    """
+    try:
+        res = await run_query(supabase_admin.table("shopkeepers").select("*"))
+        for sk in (res.data or []):
+            contact = sk.get("contact") or ""
+            if contact and normalize_phone(contact) == phone:
+                return sk
+    except Exception as e:
+        logger.error(f"Shopkeeper lookup by phone failed for {phone}: {e}", exc_info=True)
+    return None
+
+
+async def handle_shopkeeper_order_pull(full_phone: str, shopkeeper: dict):
+    """
+    Sends every packing PDF currently waiting for this shopkeeper
+    (package_pdf_status='ready'), then marks each as 'sent' and clears the
+    stored base64 so it isn't kept around once delivered. If nothing is
+    waiting, replies with a plain "no orders" message instead.
+
+    This is the ONLY place a package PDF is ever sent over WhatsApp — it
+    only runs in reply to the shopkeeper's own incoming message, never
+    automatically off an order event. See _generate_shopkeeper_package_pdf
+    in routers/orders.py for why that split exists.
+    """
+    shopkeeper_id = shopkeeper.get("id")
+    try:
+        res = await run_query(
+            supabase_admin.table("orders").select("*")
+            .eq("shopkeeper_id", shopkeeper_id)
+            .eq("package_pdf_status", "ready")
+            .order("created_at")
+        )
+        pending_orders = res.data or []
+    except Exception as e:
+        logger.error(f"Failed to fetch pending package PDFs for shopkeeper {shopkeeper_id}: {e}", exc_info=True)
+        pending_orders = []
+
+    if not pending_orders:
+        await run_blocking(send_text, full_phone, msg_no_shopkeeper_orders())
+        return
+
+    for order in pending_orders:
+        order_id = order["id"]
+        b64 = order.get("package_pdf_base64")
+        if not b64:
+            continue  # ready status but no PDF payload — skip rather than fail the whole batch
+        try:
+            pdf_bytes = base64.b64decode(b64)
+            ok = await run_blocking(
+                send_file_base64, full_phone, pdf_bytes,
+                filename=order.get("package_pdf_filename") or f"order_{str(order_id)[:8]}.pdf",
+                caption=msg_shopkeeper_pdf_caption(order.get("product_name", "")),
+            )
+            if ok:
+                # Clear the stored PDF once delivered — no need to keep a
+                # copy of every packing slip sitting in the orders table.
+                await run_query(
+                    supabase_admin.table("orders").update({
+                        "package_pdf_status": "sent",
+                        "package_pdf_base64": None,
+                    }).eq("id", order_id)
+                )
+            else:
+                logger.warning(f"Package PDF send failed for order {order_id} — left as 'ready' for retry")
+        except Exception as e:
+            logger.error(f"Package PDF pull-send failed for order {order_id}: {e}", exc_info=True)
 
 
 async def get_agent_state(order_id: str) -> dict:
@@ -154,6 +240,19 @@ async def whatsapp_webhook(request: Request):
         phone = normalize_phone(phone_raw)
 
     logger.info(f"WhatsApp incoming from {phone}: type={msg_type}, body={body_text[:50]}")
+
+    # ─── Shopkeeper package-PDF pull ───────────────────────────────────────
+    # Only fires when BOTH are true: the sender's number matches a
+    # shopkeeper's registered contact in the admin panel, AND the message is
+    # one of the recognized pull keywords. A random/unregistered number
+    # sending "order" falls straight through to the normal customer flow
+    # below instead. This is the only path that ever sends a shopkeeper
+    # their packing PDF — see handle_shopkeeper_order_pull for why.
+    if body_text in SHOPKEEPER_PULL_KEYWORDS:
+        shopkeeper = await find_shopkeeper_by_phone(phone)
+        if shopkeeper:
+            await handle_shopkeeper_order_pull(full_phone, shopkeeper)
+            return {"status": "ok"}
 
     order = await get_latest_order(phone)
     agent_state = await get_agent_state(order["id"]) if order else {}

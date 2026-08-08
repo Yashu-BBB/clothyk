@@ -62,14 +62,23 @@ async def dashboard_data(request: Request, admin=Depends(require_admin)):
         refund_pending_res = await run_query(supabase_admin.table("orders").select("*").eq("refund_status", "pending"))
         refund_pending = refund_pending_res.data or []
 
-        # Orders whose shopkeeper package PDF never made it out over WhatsApp
-        # even after send_file_base64's internal retries — surfaced here so
-        # an admin can manually resend via /admin/orders/{id}/resend-package-pdf
-        # instead of the shopkeeper silently never getting their packing slip.
+        # Orders whose shopkeeper package PDF failed to even generate —
+        # surfaced here so an admin can manually retry via
+        # /admin/orders/{id}/resend-package-pdf instead of the shopkeeper
+        # silently never having a packing slip waiting for them.
         failed_pdf_res = await run_query(
             supabase_admin.table("orders").select("id,customer_name,product_name,created_at").eq("package_pdf_status", "failed")
         )
         failed_package_pdfs = failed_pdf_res.data or []
+
+        # Orders whose package PDF is built and waiting — these are NOT sent
+        # automatically; they go out only when the shopkeeper's own
+        # registered WhatsApp number messages the bot asking for their
+        # orders (see handle_shopkeeper_order_pull in routers/whatsapp.py).
+        ready_pdf_res = await run_query(
+            supabase_admin.table("orders").select("id", count="exact").eq("package_pdf_status", "ready")
+        )
+        packages_awaiting_pickup = ready_pdf_res.count or 0
 
         # NimbusPost shipment stats
         shipments_today_res = await run_query(
@@ -103,6 +112,7 @@ async def dashboard_data(request: Request, admin=Depends(require_admin)):
             "pending_shipments": pending_shipments,
             "in_transit_shipments": in_transit_shipments,
             "failed_package_pdfs": failed_package_pdfs,
+            "packages_awaiting_pickup": packages_awaiting_pickup,
         }
         await cache_set(cache_key, result, ttl=120)
         return result
@@ -279,13 +289,20 @@ async def ship_order(order_id: str, admin=Depends(require_admin)):
 @router.post("/orders/{order_id}/resend-package-pdf")
 async def resend_package_pdf(order_id: str, admin=Depends(require_admin)):
     """
-    Manually re-triggers the shopkeeper package PDF (photo + label/slip) for
-    one order — for when it's stuck at package_pdf_status='failed' (WhatsApp
-    send failed even after automatic retries) or an admin just wants to
-    re-send it. Re-fetches NimbusPost's label fresh from label_url if the
-    order already has one, so the barcode/AWB on page 2 is still correct.
+    Manually re-triggers shopkeeper package PDF GENERATION for one order —
+    for when it's stuck at package_pdf_status='failed' or an admin just
+    wants to rebuild it. Re-fetches NimbusPost's label fresh from label_url
+    if the order already has one, so the barcode/AWB on page 2 is still
+    correct.
+
+    This does NOT send anything over WhatsApp — it only (re)builds the PDF
+    and leaves it at package_pdf_status='ready'. Delivery only ever happens
+    when the shopkeeper's own registered number messages the bot asking for
+    their orders (see handle_shopkeeper_order_pull in routers/whatsapp.py).
+    Sending it automatically from here would reintroduce the same
+    unsolicited-push pattern that got the WhatsApp number restricted.
     """
-    from routers.orders import _send_shopkeeper_package_pdf
+    from routers.orders import _generate_shopkeeper_package_pdf
 
     try:
         res = await run_query(supabase_admin.table("orders").select("*").eq("id", order_id).single())
@@ -311,16 +328,16 @@ async def resend_package_pdf(order_id: str, admin=Depends(require_admin)):
             except Exception as e:
                 logger.warning(f"Could not refetch NimbusPost label for resend on order {order_id}: {e}")
 
-        await _send_shopkeeper_package_pdf(order, shopkeeper, label_bytes)
+        await _generate_shopkeeper_package_pdf(order, shopkeeper, label_bytes)
 
-        # Re-read so the caller sees the outcome (sent/failed) immediately.
+        # Re-read so the caller sees the outcome (ready/failed) immediately.
         updated = await run_query(supabase_admin.table("orders").select("package_pdf_status").eq("id", order_id).single())
         status = (updated.data or {}).get("package_pdf_status")
-        if status != "sent":
-            raise HTTPException(status_code=502, detail="Resend attempt failed — check WhatsApp/chatpilot connectivity and retry")
+        if status != "ready":
+            raise HTTPException(status_code=502, detail="PDF regeneration failed — check server logs and retry")
 
-        logger.info(f"Admin {admin['sub']} resent package PDF for order {order_id}")
-        return {"success": True}
+        logger.info(f"Admin {admin['sub']} regenerated package PDF for order {order_id} (queued for shopkeeper pickup)")
+        return {"success": True, "status": "ready"}
     except HTTPException:
         raise
     except Exception as e:
